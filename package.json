@@ -1,0 +1,20 @@
+{
+  "name": "neon-racer",
+  "version": "1.0.0",
+  "description": "A deployable Neon Racer browser game with a Node.js backend leaderboard.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "game",
+    "node",
+    "leaderboard"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

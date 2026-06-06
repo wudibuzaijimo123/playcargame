@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Neon Racer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game" aria-label="霓虹赛车游戏画布"></canvas>
+
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">ONLINE ARCADE</div>
+      <div class="brand">NEON RACER</div>
+    </div>
+    <div class="server">
+      <span id="serverDot" class="dot"></span>
+      <span id="serverText">连接中</span>
+    </div>
+  </header>
+
+  <section class="hud">
+    <div class="metric">
+      <strong id="speed">0</strong>
+      <span>速度</span>
+    </div>
+    <div class="metric">
+      <strong id="score">0</strong>
+      <span>分数</span>
+    </div>
+    <div class="metric">
+      <strong id="best">0</strong>
+      <span>本机最佳</span>
+    </div>
+  </section>
+
+  <aside class="leaderboard" aria-label="排行榜">
+    <div class="panel-title">
+      <span>排行榜</span>
+      <button id="refreshRanks" title="刷新排行榜">刷新</button>
+    </div>
+    <ol id="leaderboardList">
+      <li>正在读取服务器成绩...</li>
+    </ol>
+  </aside>
+
+  <div class="nitro" aria-label="氮气">
+    <div id="nitroBar"></div>
+  </div>
+
+  <div class="controls">
+    <button id="left" aria-label="向左">&larr;</button>
+    <button class="boost" id="boost" aria-label="氮气加速">NITRO</button>
+    <button id="right" aria-label="向右">&rarr;</button>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="menu">
+      <div class="kicker">多人排行榜版</div>
+      <h1 id="title">NEON RACER</h1>
+      <p id="message">躲开车流，收集金币，把成绩提交到服务器排行榜。</p>
+      <label class="name-field">
+        <span>玩家名</span>
+        <input id="playerName" maxlength="16" placeholder="输入你的昵称">
+      </label>
+      <button class="start" id="start">开始比赛</button>
+      <div class="tips">A / ← 左移　D / → 右移　W / ↑ 加速　Space 氮气</div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
