@@ -29,6 +29,7 @@ let traffic = [];
 let coins = [];
 let particles = [];
 let stars = [];
+let speedLines = [];
 const keys = {};
 
 let best = Number(localStorage.getItem("neonRushBest") || 0);
@@ -73,6 +74,16 @@ function resize() {
     radius: Math.random() * 1.7 + .3,
     alpha: Math.random() * .7 + .2
   }));
+  speedLines = Array.from({ length: 8 }, () => resetSpeedLine({}));
+}
+
+function resetSpeedLine(line) {
+  line.x = Math.random() * width;
+  line.y = -Math.random() * height;
+  line.length = Math.random() * 100 + 60;
+  line.speed = Math.random() * 18 + 18;
+  line.alpha = Math.random() * 0.22 + 0.05;
+  return line;
 }
 
 function reset() {
@@ -124,7 +135,8 @@ function spawn() {
     width: enemyWidth,
     height: enemyHeight,
     color: `hsl(${Math.random() * 360} 85% 62%)`,
-    speed: Math.random() * 2
+    speed: Math.random() * 2,
+    type: Math.floor(Math.random() * 3) // 0: Sports, 1: Truck, 2: Sedan
   });
   if (Math.random() > .42) {
     const coinLane = Math.floor(Math.random() * 4);
@@ -177,6 +189,100 @@ function update() {
   car.x += car.velocityX;
   car.x = Math.max(roadLeft + 8, Math.min(roadRight - car.width - 8, car.x));
 
+  // Exhaust flame particles and tire sparks for the player car
+  if (running) {
+    if (boosting) {
+      for (let i = 0; i < 2; i++) {
+        // Left exhaust
+        particles.push({
+          x: car.x + car.width / 2 - 14 + (Math.random() - 0.5) * 4,
+          y: car.y + car.height - 4 + Math.random() * 4,
+          velocityX: (Math.random() - 0.5) * 2 - car.velocityX * 0.1,
+          velocityY: Math.random() * 3 + 6 + speed * 0.15,
+          life: 1,
+          radius: Math.random() * 4 + 3,
+          color: `hsl(${190 + Math.random() * 30} 100% 70%)` // Cyan/Blue
+        });
+        // Right exhaust
+        particles.push({
+          x: car.x + car.width / 2 + 14 + (Math.random() - 0.5) * 4,
+          y: car.y + car.height - 4 + Math.random() * 4,
+          velocityX: (Math.random() - 0.5) * 2 - car.velocityX * 0.1,
+          velocityY: Math.random() * 3 + 6 + speed * 0.15,
+          life: 1,
+          radius: Math.random() * 4 + 3,
+          color: `hsl(${270 + Math.random() * 30} 100% 65%)` // Purple/Magenta
+        });
+      }
+      // Faint fire sparks
+      if (Math.random() < 0.3) {
+        particles.push({
+          x: car.x + car.width / 2 + (Math.random() - 0.5) * 20,
+          y: car.y + car.height + 4,
+          velocityX: (Math.random() - 0.5) * 4,
+          velocityY: Math.random() * 2 + 2,
+          life: 0.8,
+          radius: Math.random() * 2 + 1,
+          color: "#ffffff"
+        });
+      }
+    } else if (frame % 3 === 0) {
+      // Normal engine smoke
+      particles.push({
+        x: car.x + car.width / 2 - 14 + (Math.random() - 0.5) * 2,
+        y: car.y + car.height + 2,
+        velocityX: (Math.random() - 0.5) * 0.8,
+        velocityY: Math.random() * 1.5 + 1.5,
+        life: 0.6,
+        radius: Math.random() * 2 + 1,
+        color: "rgba(255, 255, 255, 0.18)"
+      });
+      particles.push({
+        x: car.x + car.width / 2 + 14 + (Math.random() - 0.5) * 2,
+        y: car.y + car.height + 2,
+        velocityX: (Math.random() - 0.5) * 0.8,
+        velocityY: Math.random() * 1.5 + 1.5,
+        life: 0.6,
+        radius: Math.random() * 2 + 1,
+        color: "rgba(255, 255, 255, 0.18)"
+      });
+    }
+
+    // Tire drift tracks and sparks on sharp turns
+    if (Math.abs(car.velocityX) > 2.2 && Math.random() < 0.4) {
+      // Left tire drift spark
+      particles.push({
+        x: car.x + 4,
+        y: car.y + car.height - 10,
+        velocityX: -car.velocityX * 0.3 + (Math.random() - 0.5) * 1.5,
+        velocityY: Math.random() * 1.5 + 1,
+        life: 0.7,
+        radius: Math.random() * 2.5 + 1,
+        color: "rgba(98, 239, 255, 0.45)"
+      });
+      // Right tire drift spark
+      particles.push({
+        x: car.x + car.width - 4,
+        y: car.y + car.height - 10,
+        velocityX: -car.velocityX * 0.3 + (Math.random() - 0.5) * 1.5,
+        velocityY: Math.random() * 1.5 + 1,
+        life: 0.7,
+        radius: Math.random() * 2.5 + 1,
+        color: "rgba(98, 239, 255, 0.45)"
+      });
+    }
+  }
+
+  // Update speed lines during boost
+  if (boosting) {
+    speedLines.forEach(line => {
+      line.y += line.speed + speed * 1.2;
+      if (line.y > height) {
+        resetSpeedLine(line);
+      }
+    });
+  }
+
   if (frame % Math.max(48, Math.floor(94 - baseSpeed * 2.1)) === 0) spawn();
   traffic.forEach(enemy => enemy.y += speed - enemy.speed);
   coins.forEach(coin => { coin.y += speed; coin.spin += .12; });
@@ -222,11 +328,36 @@ function drawBackground() {
     if (star.y > height) star.y = 0;
     ctx.globalAlpha = star.alpha;
     ctx.fillStyle = "#bbedff";
-    ctx.beginPath();
-    ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-    ctx.fill();
+    
+    // Stretch stars into speed lines when boosting
+    if (boosting) {
+      ctx.beginPath();
+      ctx.moveTo(star.x, star.y);
+      ctx.lineTo(star.x, star.y + star.radius * 7);
+      ctx.lineWidth = star.radius * 0.8;
+      ctx.strokeStyle = "#bbedff";
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
   });
   ctx.globalAlpha = 1;
+
+  // Draw full-screen speed lines when boosting
+  if (boosting) {
+    ctx.save();
+    ctx.lineWidth = 1.2;
+    speedLines.forEach(line => {
+      ctx.strokeStyle = `rgba(98, 239, 255, ${line.alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(line.x, line.y);
+      ctx.lineTo(line.x, line.y + line.length);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
 
   ctx.shadowBlur = 28;
   ctx.shadowColor = "#d742ff";
@@ -260,34 +391,263 @@ function drawBackground() {
 
 function drawCar(vehicle, player = false) {
   ctx.save();
+  
+  // Calculate tilt angle based on horizontal velocity (only for player)
+  let tiltAngle = player ? vehicle.velocityX * 0.012 : 0;
+  
+  // Translate to vehicle center and rotate for body tilt
   ctx.translate(vehicle.x + vehicle.width / 2, vehicle.y + vehicle.height / 2);
-  if (player && boosting) {
-    ctx.fillStyle = "#5ceeff";
-    ctx.shadowBlur = 25;
-    ctx.shadowColor = "#5ceeff";
+  ctx.rotate(tiltAngle);
+
+  // 1. NEON UNDERGLOW
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = player ? "#5ceeff" : vehicle.color;
+  ctx.shadowBlur = 25;
+  ctx.shadowColor = player ? "#5ceeff" : vehicle.color;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, vehicle.width * 0.7, vehicle.height * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 2. WHEELS (Draw 4 tires)
+  const wheelW = 10;
+  const wheelH = 20;
+  const wheelColor = "#0f111a";
+  const rimColor = player ? "#5ceeff" : vehicle.color;
+  
+  // Rear Wheels (facing straight)
+  ctx.fillStyle = wheelColor;
+  ctx.strokeStyle = rimColor;
+  ctx.lineWidth = 2;
+  
+  // Rear-Left Wheel
+  ctx.beginPath();
+  ctx.roundRect(-vehicle.width / 2 - 4, vehicle.height * 0.18 - wheelH / 2, wheelW, wheelH, 4);
+  ctx.fill();
+  ctx.stroke();
+  
+  // Rear-Right Wheel
+  ctx.beginPath();
+  ctx.roundRect(vehicle.width / 2 - wheelW + 4, vehicle.height * 0.18 - wheelH / 2, wheelW, wheelH, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  // Front Wheels (Steerable for player)
+  ctx.save();
+  let steerAngle = player ? Math.max(-0.25, Math.min(0.25, vehicle.velocityX * 0.05)) : 0;
+  
+  // Front-Left Wheel
+  ctx.save();
+  ctx.translate(-vehicle.width / 2 + wheelW / 2 - 4, -vehicle.height * 0.25);
+  ctx.rotate(steerAngle);
+  ctx.beginPath();
+  ctx.roundRect(-wheelW / 2, -wheelH / 2, wheelW, wheelH, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  
+  // Front-Right Wheel
+  ctx.save();
+  ctx.translate(vehicle.width / 2 - wheelW / 2 + 4, -vehicle.height * 0.25);
+  ctx.rotate(steerAngle);
+  ctx.beginPath();
+  ctx.roundRect(-wheelW / 2, -wheelH / 2, wheelW, wheelH, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  
+  ctx.restore(); // end wheels
+
+  // 3. BODY DRAWING
+  if (player) {
+    // ---- PLAYER SUPER CAR ----
+    // Gradient for player body
+    let bodyGrad = ctx.createLinearGradient(0, -vehicle.height / 2, 0, vehicle.height / 2);
+    bodyGrad.addColorStop(0, "#ffffff");
+    bodyGrad.addColorStop(0.2, "#3ce9ff");
+    bodyGrad.addColorStop(0.8, "#1a1235");
+    bodyGrad.addColorStop(1, "#0d0620");
+    ctx.fillStyle = bodyGrad;
+    
+    // Cyberpunk sports car shape path
     ctx.beginPath();
-    ctx.moveTo(-15, vehicle.height / 2);
-    ctx.lineTo(0, vehicle.height / 2 + 38 + Math.random() * 18);
-    ctx.lineTo(15, vehicle.height / 2);
+    ctx.moveTo(0, -vehicle.height * 0.52); // Front center nose
+    ctx.lineTo(vehicle.width * 0.32, -vehicle.height * 0.42); // Front-Right headlight corner
+    ctx.lineTo(vehicle.width * 0.44, -vehicle.height * 0.22); // Front-Right fender
+    ctx.lineTo(vehicle.width * 0.42, 0); // Cabin side right
+    ctx.lineTo(vehicle.width * 0.5, vehicle.height * 0.32); // Rear-Right wheel arch
+    ctx.lineTo(vehicle.width * 0.48, vehicle.height * 0.46); // Rear wing right tip
+    ctx.lineTo(vehicle.width * 0.25, vehicle.height * 0.44); // Rear spoiler inside right
+    ctx.lineTo(0, vehicle.height * 0.40); // Rear center exhaust area
+    ctx.lineTo(-vehicle.width * 0.25, vehicle.height * 0.44); // Rear spoiler inside left
+    ctx.lineTo(-vehicle.width * 0.48, vehicle.height * 0.46); // Rear wing left tip
+    ctx.lineTo(-vehicle.width * 0.5, vehicle.height * 0.32); // Rear-Left wheel arch
+    ctx.lineTo(-vehicle.width * 0.42, 0); // Cabin side left
+    ctx.lineTo(-vehicle.width * 0.44, -vehicle.height * 0.22); // Front-Left fender
+    ctx.lineTo(-vehicle.width * 0.32, -vehicle.height * 0.42); // Front-Left headlight corner
+    ctx.closePath();
+    
+    ctx.save();
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = "#3ce9ff";
     ctx.fill();
+    ctx.restore();
+
+    // Body Neon Accents/Stripe
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-vehicle.width * 0.15, -vehicle.height * 0.35);
+    ctx.lineTo(0, -vehicle.height * 0.45);
+    ctx.lineTo(vehicle.width * 0.15, -vehicle.height * 0.35);
+    ctx.stroke();
+
+    // Windshield & Cabin Glass
+    let glassGrad = ctx.createLinearGradient(0, -vehicle.height * 0.15, 0, vehicle.height * 0.15);
+    glassGrad.addColorStop(0, "#081026");
+    glassGrad.addColorStop(0.5, "#15335e");
+    glassGrad.addColorStop(1, "#3690b5");
+    ctx.fillStyle = glassGrad;
+    ctx.beginPath();
+    ctx.roundRect(-vehicle.width * 0.24, -vehicle.height * 0.16, vehicle.width * 0.48, vehicle.height * 0.32, [8, 8, 4, 4]);
+    ctx.fill();
+    // Glass highlight shine
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-vehicle.width * 0.15, -vehicle.height * 0.12);
+    ctx.lineTo(vehicle.width * 0.1, vehicle.height * 0.12);
+    ctx.stroke();
+
+    // Headlights (LED Yellow/Cyan dots)
+    ctx.fillStyle = "#fff16b";
+    ctx.fillRect(-vehicle.width * 0.28, -vehicle.height * 0.44, 7, 4);
+    ctx.fillRect(vehicle.width * 0.28 - 7, -vehicle.height * 0.44, 7, 4);
+
+    // Taillights (Red neon stripe at the spoiler base)
+    ctx.strokeStyle = "#ff2255";
+    ctx.lineWidth = 3;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = "#ff2255";
+    ctx.beginPath();
+    ctx.moveTo(-vehicle.width * 0.32, vehicle.height * 0.41);
+    ctx.lineTo(vehicle.width * 0.32, vehicle.height * 0.41);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Headlight Beams (Draw 2 cones of light projecting forward)
+    ctx.save();
+    let beamGrad = ctx.createLinearGradient(0, -vehicle.height / 2, 0, -vehicle.height / 2 - 140);
+    beamGrad.addColorStop(0, "rgba(98, 239, 255, 0.35)");
+    beamGrad.addColorStop(1, "rgba(98, 239, 255, 0)");
+    ctx.fillStyle = beamGrad;
+    
+    // Left beam
+    ctx.beginPath();
+    ctx.moveTo(-vehicle.width * 0.25, -vehicle.height * 0.45);
+    ctx.lineTo(-vehicle.width * 0.25 - 30, -vehicle.height * 0.45 - 140);
+    ctx.lineTo(-vehicle.width * 0.25 + 30, -vehicle.height * 0.45 - 140);
+    ctx.closePath();
+    ctx.fill();
+
+    // Right beam
+    ctx.beginPath();
+    ctx.moveTo(vehicle.width * 0.25, -vehicle.height * 0.45);
+    ctx.lineTo(vehicle.width * 0.25 - 30, -vehicle.height * 0.45 - 140);
+    ctx.lineTo(vehicle.width * 0.25 + 30, -vehicle.height * 0.45 - 140);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+  } else {
+    // ---- TRAFFIC VEHICLES ----
+    // Select styling based on type: 0 = Sports, 1 = Cyber-truck, 2 = Sedan
+    let type = vehicle.type !== undefined ? vehicle.type : 0;
+    
+    ctx.fillStyle = vehicle.color;
+    
+    if (type === 1) {
+      // Cyber Truck (Boxy, armored look)
+      ctx.beginPath();
+      ctx.roundRect(-vehicle.width / 2, -vehicle.height / 2, vehicle.width, vehicle.height, 4);
+      ctx.fill();
+      
+      // Cyber Truck cabin line
+      ctx.fillStyle = "#111422";
+      ctx.beginPath();
+      ctx.roundRect(-vehicle.width * 0.38, -vehicle.height * 0.2, vehicle.width * 0.76, vehicle.height * 0.36, 2);
+      ctx.fill();
+
+      // Horizontal bright light strip (front and back)
+      ctx.strokeStyle = "#fff16b";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-vehicle.width * 0.42, -vehicle.height * 0.46);
+      ctx.lineTo(vehicle.width * 0.42, -vehicle.height * 0.46);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#ff2255";
+      ctx.beginPath();
+      ctx.moveTo(-vehicle.width * 0.42, vehicle.height * 0.46);
+      ctx.lineTo(vehicle.width * 0.42, vehicle.height * 0.46);
+      ctx.stroke();
+
+    } else if (type === 2) {
+      // Futuristic Sedan (Sleek, rounded curves)
+      ctx.beginPath();
+      ctx.roundRect(-vehicle.width / 2, -vehicle.height / 2, vehicle.width, vehicle.height, 14);
+      ctx.fill();
+
+      // Rounded windshield and back window
+      ctx.fillStyle = "#0a0a14";
+      ctx.beginPath();
+      ctx.roundRect(-vehicle.width * 0.32, -vehicle.height * 0.25, vehicle.width * 0.64, vehicle.height * 0.45, 6);
+      ctx.fill();
+      
+      // Headlights (Cyan dots)
+      ctx.fillStyle = "#fff16b";
+      ctx.fillRect(-vehicle.width * 0.28, -vehicle.height * 0.46, 6, 4);
+      ctx.fillRect(vehicle.width * 0.28 - 6, -vehicle.height * 0.46, 6, 4);
+
+      // Taillights
+      ctx.fillStyle = "#ff2255";
+      ctx.fillRect(-vehicle.width * 0.32, vehicle.height * 0.42, 8, 4);
+      ctx.fillRect(vehicle.width * 0.32 - 8, vehicle.height * 0.42, 8, 4);
+    } else {
+      // Sports Car (Sleek aerodynamic corners)
+      ctx.beginPath();
+      ctx.moveTo(0, -vehicle.height * 0.5);
+      ctx.lineTo(vehicle.width * 0.45, -vehicle.height * 0.38);
+      ctx.lineTo(vehicle.width * 0.45, vehicle.height * 0.38);
+      ctx.lineTo(vehicle.width * 0.35, vehicle.height * 0.46);
+      ctx.lineTo(-vehicle.width * 0.35, vehicle.height * 0.46);
+      ctx.lineTo(-vehicle.width * 0.45, vehicle.height * 0.38);
+      ctx.lineTo(-vehicle.width * 0.45, -vehicle.height * 0.38);
+      ctx.closePath();
+      ctx.fill();
+
+      // Spoiler at rear
+      ctx.fillStyle = "#0c0d14";
+      ctx.fillRect(-vehicle.width * 0.4, vehicle.height * 0.4, vehicle.width * 0.8, 5);
+
+      // Cabin glass
+      ctx.fillStyle = "#0a0c16";
+      ctx.beginPath();
+      ctx.roundRect(-vehicle.width * 0.26, -vehicle.height * 0.18, vehicle.width * 0.52, vehicle.height * 0.35, 4);
+      ctx.fill();
+
+      // Lights
+      ctx.fillStyle = "#fff16b";
+      ctx.fillRect(-vehicle.width * 0.3, -vehicle.height * 0.42, 6, 4);
+      ctx.fillRect(vehicle.width * 0.3 - 6, -vehicle.height * 0.42, 6, 4);
+
+      ctx.fillStyle = "#ff2255";
+      ctx.fillRect(-vehicle.width * 0.35, vehicle.height * 0.38, 7, 4);
+      ctx.fillRect(vehicle.width * 0.35 - 7, vehicle.height * 0.38, 7, 4);
+    }
   }
-  ctx.shadowBlur = 20;
-  ctx.shadowColor = player ? "#56efff" : vehicle.color;
-  ctx.fillStyle = player ? "#61efff" : vehicle.color;
-  ctx.beginPath();
-  ctx.roundRect(-vehicle.width / 2, -vehicle.height / 2, vehicle.width, vehicle.height, 15);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = "#090919";
-  ctx.beginPath();
-  ctx.roundRect(-vehicle.width * .31, -vehicle.height * .2, vehicle.width * .62, vehicle.height * .38, 8);
-  ctx.fill();
-  ctx.fillStyle = player ? "#fff16b" : "#ffc2d5";
-  ctx.fillRect(-vehicle.width * .3, -vehicle.height * .4, 10, 7);
-  ctx.fillRect(vehicle.width * .3 - 10, -vehicle.height * .4, 10, 7);
-  ctx.fillStyle = "#ff3f68";
-  ctx.fillRect(-vehicle.width * .3, vehicle.height * .37, 10, 7);
-  ctx.fillRect(vehicle.width * .3 - 10, vehicle.height * .37, 10, 7);
+
   ctx.restore();
 }
 
@@ -297,12 +657,28 @@ function draw() {
     ctx.save();
     ctx.translate(coin.x, coin.y);
     ctx.scale(Math.abs(Math.cos(coin.spin)) + .15, 1);
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 22;
     ctx.shadowColor = "#ffe66a";
     ctx.fillStyle = "#ffe66a";
     ctx.beginPath();
     ctx.arc(0, 0, coin.radius, 0, Math.PI * 2);
     ctx.fill();
+    
+    // Draw inner neon border and details
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#080b18";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, coin.radius * 0.6, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Draw "C" in center
+    ctx.fillStyle = "#080b18";
+    ctx.font = "bold 11px Rajdhani, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("C", 0, 0);
+    
     ctx.restore();
   });
   traffic.forEach(enemy => drawCar(enemy));
