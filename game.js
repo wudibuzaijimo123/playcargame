@@ -174,8 +174,7 @@ const api = {
 };
 
 // 手动房号：两个人输一样的号就进同一个房间，先到的人自动建房
-async function enterRaceRoom(rawCode) {
-  if (OFFLINE_MODE) return;
+async function enterRaceRoom(rawCode, mode = "join") {
   const code = String(rawCode || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
   if (code.length < 3) {
     document.querySelector("#roomStatus").textContent = "先输入房间号（至少 3 位），两人输一样的号就能进同一个房间";
@@ -189,10 +188,11 @@ async function enterRaceRoom(rawCode) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       result = await api.post("/api/race/rooms", {
-        action: "join",
+        action: mode === "create" ? "create" : "join",
         roomCode: code,
         name: playerNameInput.value.trim() || "车手",
-        finishDistance: Number(document.querySelector("#raceLength")?.value || 1500)
+        // 距离只有房主（创建者）决定，加入方传了也会被服务端忽略
+        finishDistance: mode === "create" ? Number(document.querySelector("#raceLength")?.value || 1500) : undefined
       });
       break;
     } catch (error) {
@@ -211,6 +211,11 @@ async function enterRaceRoom(rawCode) {
   const input = document.querySelector("#roomCodeInput");
   if (input) input.value = roomCode;
   setRoomBadge(roomCode);
+  const lengthSelect = document.querySelector("#raceLength");
+  if (lengthSelect) {
+    lengthSelect.disabled = mode !== "create";
+    lengthSelect.title = mode === "create" ? "房主可修改比赛距离" : "比赛距离由房主决定";
+  }
   if (roomPollTimer) clearInterval(roomPollTimer);
   roomPollTimer = setInterval(syncRaceRoom, 60);
   startRaceStream();
@@ -279,7 +284,8 @@ function applyRaceStart(payload) {
   const serverNow = Number(payload.serverNow) || Date.now();
   const clockOffset = serverNow - Date.now();          // 服务器时钟领先本地的毫秒数
   const localStart = Number(payload.startAt) - clockOffset;
-  // 服务端重新定了发车时刻（有人重进房间）→ 跟着重排，不再被 armed 挡死
+  // 已经发车了就忽略服务端后续的时刻变化，避免比赛被打断
+  if (raceSync.armed && Date.now() > raceSync.startAt) return;
   if (raceSync.armed && Math.abs(localStart - raceSync.startAt) < 400) return;
   raceSync.startAt = localStart;
   raceSync.armed = true;
@@ -341,6 +347,7 @@ async function syncRaceRoom() {
       time: raceTime
     });
     applyRaceStart(posted);
+    if (posted.raceOver) forceEndRace();
     // 兜底：两人都在房间里但服务端暂时没给出统一时刻（例如刚被重置），本地 3 秒后发车
     if (!raceSync.armed && Number(posted.playerCount) >= 2) {
       raceSync.startAt = Date.now() + 3000;
@@ -485,7 +492,7 @@ function syncRemoteCarVisual() {
   remoteCar.group.position.z += (targetZ - remoteCar.group.position.z) * 0.6;
   remoteCar.group.position.x += (targetX - remoteCar.group.position.x) * 0.6;
   const otherSlope = (trackCurve(projected + 4) - trackCurve(projected - 4)) / 8;
-  remoteCar.group.rotation.y = -o.heading + Math.atan(otherSlope);
+  remoteCar.group.rotation.y = -o.heading - Math.atan(otherSlope);
   // 拉开太远就干脆不画（交给屏幕提示条和小地图显示）
   remoteCar.group.visible = Math.abs(rel) < 420;
   updateRivalMarker(rel);
@@ -511,6 +518,7 @@ function startRaceStream() {
       try { data = JSON.parse(event.data); } catch (error) { return; }
       if (!data) return;
       applyRaceStart(data);
+      if (data.raceOver) forceEndRace();
       const other = (data.players || [])[0];
       if (other) updateRemoteCar(other);
     };
@@ -1412,16 +1420,28 @@ const traffic = [];
 const trafficColors = [0x111111, 0x0055ff, 0xcc2222, 0x888888, 0x1e3a5f];
 
 function spawnTraffic() {
-  const laneIndex = Math.floor(Math.random() * LANE_COUNT);
-  const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
-  const color = trafficColors[Math.floor(Math.random() * trafficColors.length)];
-  const enemy = createTeslaCar(false, color);
+  if (traffic.length > 46) return;   // 上限，别把手机拖垮
 
-  enemy.group.position.set(laneX, 0, -200);
-  enemy.laneX = laneX;
-  enemy.speed = 0.22 + Math.random() * 0.18;
-  scene.add(enemy.group);
-  traffic.push(enemy);
+  // 有一定概率一次刷出并排的 2~3 辆，只留一条缝，逼玩家变道
+  const blockCount = Math.random() < 0.42 ? 2 : (Math.random() < 0.18 ? 3 : 1);
+  const freeLanes = Math.max(1, LANE_COUNT - blockCount);
+  const startLane = Math.floor(Math.random() * freeLanes);
+
+  for (let i = 0; i < blockCount; i++) {
+    const laneIndex = Math.min(LANE_COUNT - 1, startLane + i);
+    const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
+    const color = trafficColors[Math.floor(Math.random() * trafficColors.length)];
+    const enemy = createTeslaCar(false, color);
+
+    enemy.group.position.set(laneX, 0, -380 - Math.random() * 60);
+    enemy.laneX = laneX;
+    // 快慢车混跑：慢车 60~80 km/h，快车 120~160 km/h
+    enemy.speed = Math.random() < 0.55
+      ? 0.14 + Math.random() * 0.10
+      : 0.40 + Math.random() * 0.20;
+    scene.add(enemy.group);
+    traffic.push(enemy);
+  }
 }
 
 const coins = [];
@@ -1685,7 +1705,7 @@ function resetGame() {
   nitroBar.style.width = "100%";
 
   // 开局立即在前方车道生成 6 辆巡航车流，绝不让道路空旷！
-  const initialZ = [-100, -155, -210, -270, -330, -390];
+  const initialZ = [-70, -105, -140, -180, -220, -260, -300, -340, -380, -420, -460, -500, -540, -580];
   initialZ.forEach((z, idx) => {
     const laneIndex = idx % LANE_COUNT;
     const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
@@ -1764,6 +1784,27 @@ function finishRace() {
   }
   document.querySelector("#start").textContent = "再跑一圈";
   overlay.classList.remove("hidden");
+}
+
+// 对手冲线 5 秒后你还没到终点 -> 强制结束（判负但保留成绩）
+function forceEndRace() {
+  if (!running) return;
+  running = false;
+  sound.stopBGM();
+  const other = raceSync.other;
+  title.textContent = "比赛结束";
+  const lines = [
+    "对手已经冲线，你没能在他冲线后 5 秒内到达终点。",
+    `你的进度：${Math.round(raceDistance)} / ${finishDistance} m　用时：${formatRaceTime(raceTime)}`,
+    `当前速度：${Math.round(currentSpeed * 90)} km/h　最高速度：${Math.round(maxSpeed)} km/h`
+  ];
+  if (other && other.finishTime) {
+    lines.splice(1, 0, `对手用时 ${formatRaceTime(other.finishTime)}　冲线 ${other.finishSpeed || 0} km/h`);
+  }
+  message.innerHTML = lines.join("<br>");
+  document.querySelector("#start").textContent = "再来一局";
+  overlay.classList.remove("hidden");
+  setRoomBadge(roomCode, false, "比赛结束");
 }
 
 async function endGame() {
@@ -2026,7 +2067,7 @@ function update() {
   // 车身朝向 = 转向角 + 赛道切线方向，弯道上车头始终顺着路
   const roadSlope = (trackCurve(raceDistance + 4) - trackCurve(raceDistance - 4)) / 8;
   const roadYaw = Math.atan(roadSlope);
-  player.group.rotation.y = -carPhysics.heading + roadYaw;
+  player.group.rotation.y = -carPhysics.heading - roadYaw;
   player.group.rotation.z = -carPhysics.roll;
 
   // 前轮机械打舵转向：向右打舵为负，向左打舵为正 (左右打舵清晰可见且方向与车头行进绝对一致！)
@@ -2074,7 +2115,7 @@ function update() {
   });
 
   // 5. 敌车刷新与真实碰撞检测 (高频刷新车流，丰富自驾驾驶感)
-  if (frame % Math.max(80, Math.floor(125 - currentSpeed * 10)) === 0) {
+  if (frame % Math.max(38, Math.floor(72 - currentSpeed * 14)) === 0) {
     spawnTraffic();
   }
   if (Math.random() < 0.03) {
@@ -2486,7 +2527,7 @@ bindPedal("#throttle", "throttle");
 bindPedal("#brake", "brake");
 
 document.querySelector("#createRoom")?.addEventListener("click", async () => {
-  try { await enterRaceRoom(document.querySelector("#roomCodeInput")?.value); }
+  try { await enterRaceRoom(document.querySelector("#roomCodeInput")?.value, "create"); }
   catch (error) { document.querySelector("#roomStatus").textContent = error.message; }
 });
 document.querySelector("#joinRoom")?.addEventListener("click", async () => {
