@@ -22,6 +22,9 @@ const audioToggle = document.querySelector("#audioToggle");
 const tiltToggle = document.querySelector("#tiltToggle");
 const buttonMode = document.querySelector("#buttonMode");
 const tiltMode = document.querySelector("#tiltMode");
+const menuButtonMode = document.querySelector("#menuButtonMode");
+const menuTiltMode = document.querySelector("#menuTiltMode");
+const steeringHelp = document.querySelector("#steeringHelp");
 const impactHud = document.querySelector("#impactHud");
 const impactValue = document.querySelector("#impactValue");
 const soundStatus = document.querySelector("#soundStatus");
@@ -849,7 +852,7 @@ function spawnTraffic() {
   const enemy = createTeslaCar(false, color);
 
   enemy.group.position.set(laneX, 0, -200);
-  enemy.speed = 0.35 + Math.random() * 0.35;
+  enemy.speed = 0.22 + Math.random() * 0.18;
   scene.add(enemy.group);
   traffic.push(enemy);
 }
@@ -1113,7 +1116,7 @@ function resetGame() {
     const color = trafficColors[idx % trafficColors.length];
     const enemy = createTeslaCar(false, color);
     enemy.group.position.set(laneX, 0, z);
-    enemy.speed = 0.35 + Math.random() * 0.3;
+    enemy.speed = 0.22 + Math.random() * 0.16;
     scene.add(enemy.group);
     traffic.push(enemy);
   });
@@ -1141,8 +1144,8 @@ async function endGame() {
   best = Math.max(best, finalScore);
   localStorage.setItem("neonRushBest", best);
   bestEl.textContent = best;
-  title.textContent = "车辆发生擦碰";
-  message.innerHTML = `本次探索自驾里程：<b style="color:#61efff;font-size:24px">${finalScore} KM</b><br>成绩已记录！`;
+  title.textContent = "旅程结束";
+  message.innerHTML = `本次安全行驶得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>避开车流，再挑战一次吧。`;
   document.querySelector("#start").textContent = "重新启程";
   overlay.classList.remove("hidden");
 
@@ -1183,14 +1186,14 @@ function update() {
   boosting = wantsBoost;
   nitro = boosting ? Math.max(0, nitro - 0.7) : Math.min(100, nitro + 0.12);
 
-  const targetSpeed = accelerating ? 1.35 : 1.0;
+  const targetSpeed = accelerating ? 1.12 : 0.72;
   baseSpeed += (targetSpeed - baseSpeed) * 0.05;
-  currentSpeed = baseSpeed + (boosting ? 0.75 : 0);
+  currentSpeed = baseSpeed + (boosting ? 0.38 : 0);
 
   score += currentSpeed * 0.45;
   nitroBar.style.width = `${nitro}%`;
   scoreEl.textContent = Math.floor(score);
-  speedEl.textContent = Math.floor(currentSpeed * 115);
+  speedEl.textContent = Math.floor(currentSpeed * 90);
 
   sound.updateEngine(currentSpeed, boosting);
 
@@ -1226,7 +1229,7 @@ function update() {
 
   // 核心定则：后轴中心严格顺着车身朝向切线前进，没有任何横向打滑！
   // 速度在 X 轴的物理切向投影 (heading > 0 为向右，heading < 0 为向左)
-  const forwardVel = currentSpeed * 22.0;
+  const forwardVel = currentSpeed * 17.0;
   const lateralVel = forwardVel * Math.sin(carPhysics.heading);
   carPhysics.x += lateralVel * dt;
 
@@ -1276,7 +1279,7 @@ function update() {
   });
 
   // 4. 赛道与自然景物流转 + 风车旋转
-  const moveZ = currentSpeed * 1.8;
+  const moveZ = currentSpeed * 1.35;
   roadSegments.forEach(seg => {
     seg.position.z += moveZ;
     if (seg.position.z > ROAD_SEGMENT_LENGTH) {
@@ -1311,7 +1314,7 @@ function update() {
 
   for (let i = traffic.length - 1; i >= 0; i--) {
     const enemy = traffic[i];
-    enemy.group.position.z += moveZ - enemy.speed * 1.35;
+    enemy.group.position.z += moveZ - enemy.speed * 1.0;
     enemy.group.position.y = Math.sin(frame * 0.11 + i) * 0.01;
     enemy.group.rotation.z = Math.sin(frame * 0.08 + i) * 0.006;
     enemy.wheels.forEach(w => {
@@ -1518,6 +1521,13 @@ if (tiltToggle) {
 function updateSteeringModeUI() {
   buttonMode?.classList.toggle("active", steeringMode === "buttons");
   tiltMode?.classList.toggle("active", steeringMode === "tilt");
+  menuButtonMode?.classList.toggle("active", steeringMode === "buttons");
+  menuTiltMode?.classList.toggle("active", steeringMode === "tilt");
+  if (steeringHelp) {
+    steeringHelp.textContent = steeringMode === "tilt"
+      ? "已选择手机倾斜：左右摇摆手机控制方向"
+      : "已选择按键：使用方向键或电脑键盘控制";
+  }
 }
 
 buttonMode?.addEventListener("click", () => {
@@ -1530,7 +1540,20 @@ buttonMode?.addEventListener("click", () => {
   if (soundStatus) soundStatus.textContent = "🎮 按键控制方向";
 });
 
+menuButtonMode?.addEventListener("click", () => {
+  steeringMode = "buttons";
+  tiltEnabled = false;
+  tiltSteer = 0;
+  tiltCenter = null;
+  window.removeEventListener("devicemotion", handleDeviceTilt);
+  updateSteeringModeUI();
+});
+
 tiltMode?.addEventListener("click", () => {
+  if (!tiltEnabled) toggleTiltSteering();
+});
+
+menuTiltMode?.addEventListener("click", () => {
   if (!tiltEnabled) toggleTiltSteering();
 });
 

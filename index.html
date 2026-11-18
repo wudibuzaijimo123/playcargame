@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
   <!-- 3D WebGL Canvas 容器 -->
@@ -121,6 +121,14 @@
         <span>车手昵称</span>
         <input id="playerName" maxlength="16" placeholder="输入你的车手名">
       </label>
+      <div class="menu-steering" role="group" aria-label="选择方向控制方式">
+        <div class="theme-label">选择方向控制方式</div>
+        <div class="menu-steering-options">
+          <button class="steering-choice active" id="menuButtonMode" type="button">🎮 按键控制</button>
+          <button class="steering-choice" id="menuTiltMode" type="button">📱 手机倾斜</button>
+        </div>
+        <div class="steering-help" id="steeringHelp">使用屏幕方向键或电脑键盘控制</div>
+      </div>
       <!-- 苹果 iOS Safari 提示与试听测试 -->
       <div style="background:rgba(255,180,0,0.12);border:1px solid rgba(255,200,0,0.35);border-radius:10px;padding:8px 12px;margin:8px 0 12px;font-size:11px;color:#ffeaa7;line-height:1.5;text-align:left;">
         🔔 <b>苹果 iPhone / Safari 用户提示：</b><br>
@@ -144,6 +152,6 @@
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=13"></script>
+  <script src="game.js?v=14"></script>
 </body>
 </html>

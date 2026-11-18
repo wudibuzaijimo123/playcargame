@@ -370,6 +370,7 @@ body.impact-flash #game-container { animation: impact-pulse .24s ease-out; }
   place-items: center;
   padding: 16px;
   background: radial-gradient(ellipse at 50% 35%, rgba(15, 30, 60, 0.75), rgba(5, 6, 20, 0.95) 75%);
+  overflow-y: auto;
   transition: opacity .3s ease, visibility .3s ease;
 }
 
@@ -497,6 +498,25 @@ p {
   border-color: #63efff;
   box-shadow: 0 0 0 2px rgba(99, 239, 255, 0.2);
 }
+
+.menu-steering { margin: 12px 0 14px; text-align: left; }
+.menu-steering-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.steering-choice {
+  min-height: 42px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 10px;
+  background: rgba(15,22,50,.85);
+  color: #c0c6e8;
+  font: 700 13px 'Rajdhani', sans-serif;
+  cursor: pointer;
+}
+.steering-choice.active {
+  border-color: #5ceeff;
+  background: linear-gradient(135deg, rgba(20,70,110,.95), rgba(60,30,95,.95));
+  color: white;
+  box-shadow: 0 0 14px rgba(92,238,255,.25);
+}
+.steering-help { margin-top: 6px; color: #8994b8; font-size: 11px; }
 
 .start {
   cursor: pointer;
