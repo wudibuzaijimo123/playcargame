@@ -77,9 +77,15 @@
   <div class="sound-status" id="soundStatus">🔊 音效已开启</div>
 
   <div class="controls">
-    <button id="left" aria-label="向左转">&larr;</button>
-    <button class="boost" id="boost" aria-label="提速">提速<br><span style="font-size:9px;opacity:0.85">加速</span></button>
-    <button id="right" aria-label="向右转">&rarr;</button>
+    <div class="steering-mode" role="group" aria-label="选择转向方式">
+      <button class="mode-option active" id="buttonMode" type="button">按键控制</button>
+      <button class="mode-option" id="tiltMode" type="button">手机倾斜</button>
+    </div>
+    <div class="control-pad">
+      <button id="left" aria-label="向左转">&larr;</button>
+      <button class="boost" id="boost" aria-label="提速">提速<br><span style="font-size:9px;opacity:0.85">加速</span></button>
+      <button id="right" aria-label="向右转">&rarr;</button>
+    </div>
   </div>
 
   <div class="overlay" id="overlay">

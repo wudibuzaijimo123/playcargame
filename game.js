@@ -20,6 +20,8 @@ const brandTitle = document.querySelector("#brandTitle");
 const quickSceneSelect = document.querySelector("#quickSceneSelect");
 const audioToggle = document.querySelector("#audioToggle");
 const tiltToggle = document.querySelector("#tiltToggle");
+const buttonMode = document.querySelector("#buttonMode");
+const tiltMode = document.querySelector("#tiltMode");
 const impactHud = document.querySelector("#impactHud");
 const impactValue = document.querySelector("#impactValue");
 const soundStatus = document.querySelector("#soundStatus");
@@ -36,6 +38,7 @@ let impactTimer = null;
 let tiltEnabled = false;
 let tiltSteer = 0;
 let tiltCenter = null;
+let steeringMode = "buttons";
 const keys = {};
 
 let best = Number(localStorage.getItem("neonRushBest") || 0);
@@ -1192,8 +1195,8 @@ function update() {
   sound.updateEngine(currentSpeed, boosting);
 
   // 2. 真实汽车物理转向 (后轴旋转中心，零漂移！)
-  const turnLeft = keys.ArrowLeft || keys.KeyA || keys.left;
-  const turnRight = keys.ArrowRight || keys.KeyD || keys.right;
+  const turnLeft = steeringMode === "buttons" && (keys.ArrowLeft || keys.KeyA || keys.left);
+  const turnRight = steeringMode === "buttons" && (keys.ArrowRight || keys.KeyD || keys.right);
 
   const dt = 1 / 60;
 
@@ -1201,7 +1204,7 @@ function update() {
   let targetSteer = 0;
   if (turnLeft) targetSteer = -PHYS.maxSteerAngle;
   else if (turnRight) targetSteer = PHYS.maxSteerAngle;
-  else if (tiltEnabled && Math.abs(tiltSteer) > 0.08) {
+  else if (steeringMode === "tilt" && Math.abs(tiltSteer) > 0.08) {
     targetSteer = tiltSteer * PHYS.maxSteerAngle;
   }
 
@@ -1456,11 +1459,12 @@ window.addEventListener("touchstart", unlockAudioAndHaptics, { passive: true });
 window.addEventListener("click", unlockAudioAndHaptics, { passive: true });
 
 function handleDeviceTilt(event) {
-  if (!tiltEnabled || typeof event.gamma !== "number") return;
-  if (tiltCenter === null) tiltCenter = event.gamma;
-  const lean = event.gamma - tiltCenter;
-  // 约 22° 达到满舵，死区可减少手持抖动造成的方向漂移。
-  const normalized = Math.max(-1, Math.min(1, lean / 22));
+  const gravityX = event.accelerationIncludingGravity?.x;
+  if (!tiltEnabled || typeof gravityX !== "number") return;
+  if (tiltCenter === null) tiltCenter = gravityX;
+  const lean = gravityX - tiltCenter;
+  // 重力在横向的分量约 3.5 m/s² 时达到满舵；过滤传感器轻微抖动。
+  const normalized = Math.max(-1, Math.min(1, lean / 3.5));
   const deadZone = 0.08;
   const target = Math.abs(normalized) < deadZone
     ? 0
@@ -1473,7 +1477,9 @@ async function toggleTiltSteering() {
     tiltEnabled = false;
     tiltSteer = 0;
     tiltCenter = null;
-    window.removeEventListener("deviceorientation", handleDeviceTilt);
+    window.removeEventListener("devicemotion", handleDeviceTilt);
+    steeringMode = "buttons";
+    updateSteeringModeUI();
     tiltToggle.textContent = "📱";
     tiltToggle.title = "开启手机倾斜转向";
     if (soundStatus) soundStatus.textContent = "📱 倾斜转向已关闭";
@@ -1481,18 +1487,20 @@ async function toggleTiltSteering() {
   }
 
   try {
-    const orientation = window.DeviceOrientationEvent;
-    if (!orientation) throw new Error("设备不支持方向传感器");
-    if (typeof orientation.requestPermission === "function") {
-      const permission = await orientation.requestPermission();
+    const motion = window.DeviceMotionEvent;
+    if (!motion) throw new Error("设备不支持加速度传感器");
+    if (typeof motion.requestPermission === "function") {
+      const permission = await motion.requestPermission();
       if (permission !== "granted") throw new Error("未获得动作传感器权限");
     }
     tiltCenter = null;
     tiltSteer = 0;
     tiltEnabled = true;
-    window.addEventListener("deviceorientation", handleDeviceTilt, true);
+    window.addEventListener("devicemotion", handleDeviceTilt, true);
     tiltToggle.textContent = "📱✓";
     tiltToggle.title = "倾斜转向已开启，点击关闭";
+    steeringMode = "tilt";
+    updateSteeringModeUI();
     if (soundStatus) soundStatus.textContent = "📱 倾斜手机控制方向";
   } catch (error) {
     if (soundStatus) soundStatus.textContent = "此设备或浏览器不支持倾斜控制";
@@ -1506,6 +1514,25 @@ if (tiltToggle) {
     toggleTiltSteering();
   });
 }
+
+function updateSteeringModeUI() {
+  buttonMode?.classList.toggle("active", steeringMode === "buttons");
+  tiltMode?.classList.toggle("active", steeringMode === "tilt");
+}
+
+buttonMode?.addEventListener("click", () => {
+  steeringMode = "buttons";
+  tiltEnabled = false;
+  tiltSteer = 0;
+  tiltCenter = null;
+  window.removeEventListener("devicemotion", handleDeviceTilt);
+  updateSteeringModeUI();
+  if (soundStatus) soundStatus.textContent = "🎮 按键控制方向";
+});
+
+tiltMode?.addEventListener("click", () => {
+  if (!tiltEnabled) toggleTiltSteering();
+});
 
 function bindButton(selector, key) {
   const element = document.querySelector(selector);

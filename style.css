@@ -533,11 +533,43 @@ p {
   right: 0;
   bottom: 0;
   z-index: 10;
-  justify-content: center;
-  align-items: flex-end;
-  gap: clamp(28px, 8vw, 72px);
-  padding: 24px 28px 20px;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 14px;
+  padding: 18px max(8vw, 24px) 24px;
   background: linear-gradient(to top, rgba(5, 6, 20, 0.7) 0%, rgba(5, 6, 20, 0.2) 60%, transparent 100%);
+}
+
+.steering-mode {
+  display: flex;
+  align-self: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(98, 239, 255, .3);
+  border-radius: 999px;
+  background: rgba(8, 13, 31, .8);
+  backdrop-filter: blur(12px);
+}
+.controls .mode-option {
+  width: auto;
+  height: 34px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #aebbd7;
+  font-size: 12px;
+}
+.controls .mode-option.active {
+  background: linear-gradient(120deg, #31cfe8, #8273ff);
+  color: #07101e;
+}
+.control-pad {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
 }
 
 .controls button {
@@ -622,14 +654,14 @@ p {
   }
 
   .controls {
-    padding-bottom: 18px;
-    gap: clamp(34px, 11vw, 76px);
-    padding-left: 30px;
-    padding-right: 30px;
+    gap: 10px;
+    padding: 12px 8vw max(20px, env(safe-area-inset-bottom));
   }
 
   .controls button { width: 66px; height: 66px; font-size: 22px; }
   .controls .boost { width: 78px; height: 78px; font-size: 12px; }
+  .controls .mode-option { width: auto; height: 32px; font-size: 11px; }
+  .control-pad { min-height: 82px; }
 
   .menu { padding: 24px 18px; }
   h1 { font-size: 32px; }
