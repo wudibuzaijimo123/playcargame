@@ -475,12 +475,16 @@ function syncRemoteCarVisual() {
   const elapsed = Math.max(0, Math.min(0.25, (Date.now() - o.at) / 1000));
   // 上报速度单位换算成实际前进：speed * 90 / 3.6 米每秒
   const projected = o.distance + (o.speed * 90 / 3.6) * elapsed;
-  const rel = projected - raceDistance;             // 真实差距，1 米 = 1 米
-  const targetZ = Math.max(-560, Math.min(80, -rel));
+  const rel = projected - raceDistance;             // 真实差距：正整数=他领先，负数=我领先
+  // 1 米就是 1 米，不做任何夹取/压缩，否则对手会被"钉"在你身边看起来一起走
+  const targetZ = -rel;
   const targetX = o.x + trackCurve(projected);
   remoteCar.group.position.z += (targetZ - remoteCar.group.position.z) * 0.6;
   remoteCar.group.position.x += (targetX - remoteCar.group.position.x) * 0.6;
-  remoteCar.group.rotation.y = -o.heading;
+  const otherSlope = (trackCurve(projected + 4) - trackCurve(projected - 4)) / 8;
+  remoteCar.group.rotation.y = -o.heading + Math.atan(otherSlope);
+  // 拉开太远就干脆不画（交给屏幕提示条和小地图显示）
+  remoteCar.group.visible = Math.abs(rel) < 420;
   updateRivalMarker(rel);
   refreshGapHud();
 }
@@ -899,11 +903,11 @@ function trackCurve(distance) {
   const keys = [
     [0.00, 0],
     [0.16, 0],
-    [0.32, 20],     // 右弯
-    [0.44, 20],
-    [0.50, 11],
-    [0.62, -20],    // U 型大弯（从左绕到右）
-    [0.72, -20],
+    [0.32, 12],     // 右弯
+    [0.44, 12],
+    [0.50, 6],
+    [0.62, -12],    // U 型大弯（从左绕到右）
+    [0.72, -12],
     [0.86, 0],      // 回正
     [1.00, 0]
   ];
@@ -2006,7 +2010,10 @@ function update() {
   // 朝向左侧 (-X) 需要绕 Y 轴逆时针旋转，即 rotation.y 为正 (-heading)
   player.group.position.x = carPhysics.x + trackCurve(raceDistance);
   player.group.position.y = Math.sin(frame * 0.16) * 0.012 + Math.abs(carPhysics.rollVel) * 0.018;
-  player.group.rotation.y = -carPhysics.heading; // 偏航角：向右偏为负，向左偏为正
+  // 车身朝向 = 转向角 + 赛道切线方向，弯道上车头始终顺着路
+  const roadSlope = (trackCurve(raceDistance + 4) - trackCurve(raceDistance - 4)) / 8;
+  const roadYaw = Math.atan(roadSlope);
+  player.group.rotation.y = -carPhysics.heading + roadYaw;
   player.group.rotation.z = -carPhysics.roll;
 
   // 前轮机械打舵转向：向右打舵为负，向左打舵为正 (左右打舵清晰可见且方向与车头行进绝对一致！)
@@ -2172,7 +2179,8 @@ function update() {
   camera.updateProjectionMatrix();
 
   // 视线永远沿赛道正前方，镜头和车一起平移，不会越开越歪
-  camera.lookAt(camera.position.x, 1.1, -16);
+  const lookSlope = (trackCurve(raceDistance + 25) - trackCurve(raceDistance)) / 25;
+  camera.lookAt(camera.position.x + lookSlope * 26, 1.1, -16);
 }
 
 // ═══════════════════════════════════════
