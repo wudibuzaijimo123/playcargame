@@ -310,6 +310,50 @@ li span {
   animation: nitro-flow 3s linear infinite;
 }
 
+.impact-hud {
+  position: fixed;
+  left: 50%;
+  top: 78px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 184, 77, .65);
+  border-radius: 999px;
+  background: rgba(45, 21, 10, .82);
+  color: #ffd27a;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  box-shadow: 0 0 22px rgba(255, 132, 55, .25);
+  opacity: 0;
+  transform: translate(-50%, -10px) scale(.92);
+  pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease;
+}
+.impact-hud.visible { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.impact-icon { font-size: 16px; }
+.sound-status {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  z-index: 11;
+  padding: 7px 11px;
+  border: 1px solid rgba(126, 247, 255, .25);
+  border-radius: 999px;
+  background: rgba(8, 13, 31, .66);
+  color: rgba(205, 247, 255, .82);
+  font-size: 11px;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+body.impact-flash #game-container { animation: impact-pulse .24s ease-out; }
+@keyframes impact-pulse {
+  0% { filter: brightness(1.8) saturate(1.8); }
+  100% { filter: brightness(1) saturate(1); }
+}
+
 @keyframes nitro-flow {
   0% { background-position: 0% 50%; }
   100% { background-position: 300% 50%; }
@@ -543,6 +587,8 @@ p {
 @media (max-width: 850px) {
   .leaderboard { display: none; }
   .server { display: none; }
+  .impact-hud { top: 134px; }
+  .sound-status { right: 10px; bottom: 104px; }
 
   .topbar { padding: 10px 14px 4px; }
   .brand { font-size: 18px; }
