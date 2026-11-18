@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
   <!-- 3D WebGL Canvas 容器 -->
@@ -107,12 +107,16 @@
         <span>车手昵称</span>
         <input id="playerName" maxlength="16" placeholder="输入你的车手名">
       </label>
-      <!-- 苹果 iOS Safari 提示 -->
+      <!-- 苹果 iOS Safari 提示与试听测试 -->
       <div style="background:rgba(255,180,0,0.12);border:1px solid rgba(255,200,0,0.35);border-radius:10px;padding:8px 12px;margin:8px 0 12px;font-size:11px;color:#ffeaa7;line-height:1.5;text-align:left;">
         🔔 <b>苹果 iPhone / Safari 用户提示：</b><br>
         1. 听不到音乐请<b>拨动手机左侧【实体静音开关】关闭静音模式</b>（露出红点时苹果系统会强制静音所有网页音效），并按音量键调大声音。<br>
         2. 苹果 iOS 系统原生不支持网页物理震动，发生碰撞时已为你呈现全屏剧烈红闪与镜头震动特效！
       </div>
+
+      <button id="testAudioBtn" type="button" style="background:rgba(97,239,255,0.18);border:1px solid #61efff;color:#61efff;padding:10px 16px;border-radius:24px;font-size:13px;cursor:pointer;margin-bottom:12px;font-weight:700;width:100%;letter-spacing:1px;display:flex;align-items:center;justify-content:center;gap:6px;">
+        🎵 点击试听 / 开启公路自驾车载音乐
+      </button>
 
       <button class="start" id="start">启动出发</button>
       <div class="tips">A / ← 左转　D / → 右转　W / ↑ 加速　Space 氮气加速</div>
@@ -126,6 +130,6 @@
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=12"></script>
+  <script src="game.js?v=13"></script>
 </body>
 </html>

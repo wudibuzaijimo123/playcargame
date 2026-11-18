@@ -67,27 +67,24 @@ class MusicEngine {
     this.ctx = null;
     this.engineGain = null;
     this.engineOsc = null;
-    this.initAudioElements();
-  }
-
-  initAudioElements() {
-    try {
-      this.bgmAudio = document.querySelector("#bgmAudio") || new Audio("assets/bgm.wav");
-      this.bgmAudio.loop = true;
-      this.bgmAudio.volume = 0.95;
-
-      this.crashAudio = document.querySelector("#crashAudio") || new Audio("assets/crash.wav");
-      this.crashAudio.volume = 1.0;
-
-      this.coinAudio = document.querySelector("#coinAudio") || new Audio("assets/coin.wav");
-      this.coinAudio.volume = 0.75;
-    } catch (e) {
-      console.warn("Audio elements init warning:", e);
-    }
+    this.synthTimer = null;
+    this.synthStep = 0;
   }
 
   ensureContext() {
-    if (!this.bgmAudio) this.initAudioElements();
+    if (!this.bgmAudio) {
+      this.bgmAudio = document.querySelector("#bgmAudio") || new Audio("assets/bgm.wav");
+      this.bgmAudio.loop = true;
+      this.bgmAudio.volume = 1.0;
+    }
+    if (!this.crashAudio) {
+      this.crashAudio = document.querySelector("#crashAudio") || new Audio("assets/crash.wav");
+      this.crashAudio.volume = 1.0;
+    }
+    if (!this.coinAudio) {
+      this.coinAudio = document.querySelector("#coinAudio") || new Audio("assets/coin.wav");
+      this.coinAudio.volume = 0.8;
+    }
 
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -136,24 +133,97 @@ class MusicEngine {
   startBGM() {
     if (!this.enabled) return;
     this.ensureContext();
+
+    // 1. 原生 HTML5 音频播放
     if (this.bgmAudio) {
       try {
-        this.bgmAudio.currentTime = 0;
+        if (this.bgmAudio.readyState > 0) {
+          this.bgmAudio.currentTime = 0;
+        }
+        this.bgmAudio.volume = 1.0;
         const playPromise = this.bgmAudio.play();
         if (playPromise !== undefined) {
-          playPromise.catch(e => {
-            console.log("Audio play promise info:", e);
+          playPromise.then(() => {
+            if (audioToggle) audioToggle.textContent = "🔊 音乐播放中";
+          }).catch(e => {
+            console.log("HTML5 Audio wait for gesture:", e);
           });
         }
       } catch (e) {}
+    }
+
+    // 2. Web Audio 双保险合成音循环 (若 HTML5 音频加载延迟，合成音立即无缝开声)
+    if (this.ctx && !this.synthTimer) {
+      const melody = [523.25, 0, 587.33, 659.25, 783.99, 0, 659.25, 587.33, 523.25, 0, 440.0, 523.25, 587.33, 0, 523.25, 0, 659.25, 0, 783.99, 880.0, 1046.5, 0, 880.0, 783.99, 659.25, 0, 783.99, 659.25, 523.25, 0, 587.33, 0];
+      const bass = [130.81, 130.81, 130.81, 130.81, 98.00, 98.00, 98.00, 98.00, 110.00, 110.00, 110.00, 110.00, 87.31, 87.31, 87.31, 87.31];
+
+      this.synthTimer = setInterval(() => {
+        if (!this.enabled || !running || !this.ctx || this.ctx.state !== "running") return;
+        const now = this.ctx.currentTime + 0.01;
+        const idx = this.synthStep % 32;
+
+        // 底鼓
+        if (idx % 4 === 0) {
+          try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.frequency.setValueAtTime(145, now);
+            osc.frequency.exponentialRampToValueAtTime(36, now + 0.12);
+            gain.gain.setValueAtTime(0.4, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.13);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.14);
+          } catch(e) {}
+        }
+
+        // 贝斯
+        const bFreq = bass[Math.floor(idx / 2) % 16];
+        if (bFreq && idx % 2 === 0) {
+          try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(bFreq, now);
+            gain.gain.setValueAtTime(0.25, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.19);
+          } catch(e) {}
+        }
+
+        // 旋律
+        const mFreq = melody[idx];
+        if (mFreq > 0) {
+          try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(mFreq, now);
+            gain.gain.setValueAtTime(0.28, now);
+            gain.gain.exponentialRampToValueAtTime(0.005, now + 0.22);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.23);
+          } catch(e) {}
+        }
+
+        this.synthStep++;
+      }, 130);
     }
   }
 
   stopBGM() {
     if (this.bgmAudio) {
-      try {
-        this.bgmAudio.pause();
-      } catch (e) {}
+      try { this.bgmAudio.pause(); } catch (e) {}
+    }
+    if (this.synthTimer) {
+      clearInterval(this.synthTimer);
+      this.synthTimer = null;
     }
   }
 
@@ -162,9 +232,26 @@ class MusicEngine {
     this.ensureContext();
     if (this.crashAudio) {
       try {
-        this.crashAudio.currentTime = 0;
+        if (this.crashAudio.readyState > 0) this.crashAudio.currentTime = 0;
+        this.crashAudio.volume = 1.0;
         this.crashAudio.play().catch(() => {});
       } catch (e) {}
+    }
+    // Web Audio 重击双保险
+    if (this.ctx && this.ctx.state === "running") {
+      try {
+        const now = this.ctx.currentTime + 0.01;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.frequency.setValueAtTime(175, now);
+        osc.frequency.exponentialRampToValueAtTime(25, now + 0.7);
+        gain.gain.setValueAtTime(1.0, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.75);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.75);
+      } catch(e) {}
     }
   }
 
@@ -173,7 +260,8 @@ class MusicEngine {
     this.ensureContext();
     if (this.coinAudio) {
       try {
-        this.coinAudio.currentTime = 0;
+        if (this.coinAudio.readyState > 0) this.coinAudio.currentTime = 0;
+        this.coinAudio.volume = 0.8;
         this.coinAudio.play().catch(() => {});
       } catch (e) {}
     }
@@ -182,7 +270,7 @@ class MusicEngine {
   playBoost() {
     if (!this.enabled) return;
     this.ensureContext();
-    if (this.ctx) {
+    if (this.ctx && this.ctx.state === "running") {
       try {
         const now = this.ctx.currentTime + 0.01;
         const osc = this.ctx.createOscillator();
@@ -209,8 +297,11 @@ class MusicEngine {
         this.bgmAudio.pause();
       }
     }
-    if (this.engineGain && this.ctx) {
-      this.engineGain.gain.setValueAtTime(this.enabled ? 0.08 : 0, this.ctx.currentTime);
+    if (!this.enabled && this.synthTimer) {
+      clearInterval(this.synthTimer);
+      this.synthTimer = null;
+    } else if (this.enabled && running && !this.synthTimer) {
+      this.startBGM();
     }
     return this.enabled;
   }
@@ -778,34 +869,39 @@ function applyTheme(themeKey) {
     buildRoadSegment(-i * ROAD_SEGMENT_LENGTH, theme);
   }
 
-  // 两侧丰富大自然元素 (小牛、小鹿、风车、木屋、树木)
-  for (let i = 0; i < 46; i++) {
+  // 两侧丰富大自然元素 (小牛、小鹿、风车、木屋、树木) - 密集沿公路两侧排布
+  const SCENERY_COUNT = 150;
+  for (let i = 0; i < SCENERY_COUNT; i++) {
     let item;
     const rand = Math.random();
 
     if (themeKey === "country") {
-      if (rand < 0.25) item = createCow();          // 呆萌小牛
-      else if (rand < 0.45) item = createDeer();     // 路边小鹿
-      else if (rand < 0.6) item = createFarmCabin(); // 农庄小木屋
-      else if (rand < 0.75) item = createWindmill(); // 风车
+      if (rand < 0.28) item = createCow();          // 呆萌小牛
+      else if (rand < 0.50) item = createDeer();     // 路边小鹿
+      else if (rand < 0.65) item = createWindmill(); // 旋转大风车
+      else if (rand < 0.80) item = createFarmCabin(); // 农庄小木屋
       else item = createTree();                      // 树木
     } else if (themeKey === "island") {
-      if (rand < 0.3) item = createDeer();
+      if (rand < 0.35) item = createDeer();
+      else if (rand < 0.55) item = createWindmill();
       else item = createPalm();
     } else if (themeKey === "jungle") {
-      if (rand < 0.35) item = createDeer();
+      if (rand < 0.4) item = createDeer();
       else item = createTree();
     } else {
       if (rand < 0.3) item = createCow();
+      else if (rand < 0.6) item = createFarmCabin();
       else item = createTree();
     }
 
     const side = i % 2 === 0 ? -1 : 1;
-    const offset = ROAD_WIDTH / 2 + 6 + Math.random() * 32;
-    item.position.set(side * offset, 0, -Math.random() * TOTAL_ROAD_LEN);
+    // 紧贴公路护栏外侧！路宽20，半宽10，护栏在10.2，景物在 11.2 到 15.5 之间，驾驶视角极为清晰
+    const offset = ROAD_WIDTH / 2 + 1.2 + Math.random() * 4.0;
+    const zPos = - (i * 3.6);
+    item.position.set(side * offset, 0, zPos);
 
     // 动物随机面朝赛道看风景
-    item.rotation.y = side === 1 ? -Math.PI / 2 + (Math.random() - 0.5) * 0.5 : Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+    item.rotation.y = (side === 1 ? -Math.PI / 2 : Math.PI / 2) + (Math.random() - 0.5) * 0.4;
 
     worldGroup.add(item);
     sceneryObjects.push(item);
@@ -896,6 +992,19 @@ function resetGame() {
 
   scoreEl.textContent = "0";
   nitroBar.style.width = "100%";
+
+  // 开局立即在前方车道生成 6 辆巡航车流，绝不让道路空旷！
+  const initialZ = [-28, -55, -85, -120, -160, -205];
+  initialZ.forEach((z, idx) => {
+    const laneIndex = idx % LANE_COUNT;
+    const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
+    const color = trafficColors[idx % trafficColors.length];
+    const enemy = createTeslaCar(false, color);
+    enemy.group.position.set(laneX, 0, z);
+    enemy.speed = 0.35 + Math.random() * 0.3;
+    scene.add(enemy.group);
+    traffic.push(enemy);
+  });
 }
 
 function startGame() {
@@ -1057,16 +1166,16 @@ function update() {
   sceneryObjects.forEach(item => {
     item.position.z += moveZ;
     if (item.position.z > 25) {
-      item.position.z -= TOTAL_ROAD_LEN;
+      item.position.z -= 540;
     }
     // 风车慢速旋转
     if (item.userData && item.userData.fan) {
-      item.userData.fan.rotation.z += 0.015;
+      item.userData.fan.rotation.z += 0.02;
     }
   });
 
-  // 5. 敌车刷新与真实碰撞检测
-  if (frame % Math.max(55, Math.floor(100 - currentSpeed * 12)) === 0) {
+  // 5. 敌车刷新与真实碰撞检测 (高频刷新车流，丰富自驾驾驶感)
+  if (frame % Math.max(35, Math.floor(65 - currentSpeed * 10)) === 0) {
     spawnTraffic();
   }
   if (Math.random() < 0.03) {
@@ -1295,6 +1404,18 @@ function onStartTap(e) {
 }
 startBtn.addEventListener("touchend", onStartTap);
 startBtn.addEventListener("click", onStartTap);
+
+const testAudioBtn = document.querySelector("#testAudioBtn");
+if (testAudioBtn) {
+  testAudioBtn.addEventListener("click", () => {
+    sound.ensureContext();
+    sound.startBGM();
+    testAudioBtn.textContent = "🎵 音乐正在播放中！(若无声请关闭iPhone左侧实体静音键)";
+    testAudioBtn.style.background = "rgba(40,230,120,0.25)";
+    testAudioBtn.style.borderColor = "#28e678";
+    testAudioBtn.style.color = "#28e678";
+  });
+}
 
 refreshRanks.addEventListener("click", loadLeaderboard);
 
