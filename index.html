@@ -3,26 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <title>Neon Racer 3D - 极速飞车</title>
+  <title>3D 极速狂飙 - 全场景漫游</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
-  <!-- 3D WebGL Canvas -->
+  <!-- 3D WebGL Canvas 容器 -->
   <div id="game-container">
     <canvas id="game" aria-label="3D赛车游戏画布"></canvas>
   </div>
 
   <header class="topbar">
     <div>
-      <div class="eyebrow">3D ARCADE RACER</div>
-      <div class="brand">NEON DRIFT 3D</div>
+      <div class="eyebrow">3D ADVENTURE RACER</div>
+      <div class="brand" id="brandTitle">COUNTRY ROAD</div>
     </div>
-    <div class="server">
-      <span id="serverDot" class="dot"></span>
-      <span id="serverText">连接中</span>
+    
+    <!-- 顶栏快速切场景按钮 -->
+    <div class="topbar-actions">
+      <div class="quick-scene-select">
+        <select id="quickSceneSelect" aria-label="切换场景">
+          <option value="country">🌾 乡间小路</option>
+          <option value="island">🏝️ 逃离荒岛</option>
+          <option value="jungle">🌴 丛林狂飙</option>
+          <option value="river">🌊 沿河峡谷</option>
+        </select>
+      </div>
+      <div class="server">
+        <span id="serverDot" class="dot"></span>
+        <span id="serverText">在线</span>
+      </div>
     </div>
   </header>
 
@@ -33,7 +45,7 @@
     </div>
     <div class="metric">
       <strong id="score">0</strong>
-      <span>得分</span>
+      <span>探索得分</span>
     </div>
     <div class="metric">
       <strong id="best">0</strong>
@@ -43,11 +55,11 @@
 
   <aside class="leaderboard" aria-label="排行榜">
     <div class="panel-title">
-      <span>🏆 全球风云榜</span>
+      <span>🏆 车王排行榜</span>
       <button id="refreshRanks" title="刷新排行榜">刷新</button>
     </div>
     <ol id="leaderboardList">
-      <li>正在读取服务器成绩...</li>
+      <li>正在读取排行榜...</li>
     </ol>
   </aside>
 
@@ -57,26 +69,50 @@
 
   <div class="controls">
     <button id="left" aria-label="向左转">&larr;</button>
-    <button class="boost" id="boost" aria-label="氮气喷射">NITRO<br><span style="font-size:9px;opacity:0.8">大喷</span></button>
+    <button class="boost" id="boost" aria-label="氮气喷射">NITRO<br><span style="font-size:9px;opacity:0.85">爆发</span></button>
     <button id="right" aria-label="向右转">&rarr;</button>
   </div>
 
   <div class="overlay" id="overlay">
     <div class="menu">
-      <div class="kicker">3D 极速飞车引擎</div>
-      <h1 id="title">NEON DRIFT</h1>
-      <p id="message">QQ飞车式第三人称视角！左右躲避车流，收集能量核心，按下 NITRO 喷射破风！</p>
+      <div class="kicker">3D 极速自然探索引擎</div>
+      <h1 id="title">极速狂飙 3D</h1>
+      <p id="message">真实大自然风景！躲避前方车流，收集金币，按下 NITRO 氮气破风冲刺！</p>
+
+      <!-- 场景选择器 -->
+      <div class="theme-selector">
+        <div class="theme-label">选择赛道主题地图</div>
+        <div class="theme-chips">
+          <button class="theme-chip active" data-theme="country" type="button">
+            <span class="chip-icon">🌾</span>
+            <span class="chip-name">乡间小路</span>
+          </button>
+          <button class="theme-chip" data-theme="island" type="button">
+            <span class="chip-icon">🏝️</span>
+            <span class="chip-name">逃离荒岛</span>
+          </button>
+          <button class="theme-chip" data-theme="jungle" type="button">
+            <span class="chip-icon">🌴</span>
+            <span class="chip-name">丛林狂飙</span>
+          </button>
+          <button class="theme-chip" data-theme="river" type="button">
+            <span class="chip-icon">🌊</span>
+            <span class="chip-name">沿河峡谷</span>
+          </button>
+        </div>
+      </div>
+
       <label class="name-field">
-        <span>车手代号</span>
+        <span>车手昵称</span>
         <input id="playerName" maxlength="16" placeholder="输入你的车手名">
       </label>
-      <button class="start" id="start">启动引擎</button>
-      <div class="tips">A / ← 左转　D / → 右转　W / ↑ 提速　Space 氮气喷射</div>
+      <button class="start" id="start">启动出发</button>
+      <div class="tips">A / ← 左转　D / → 右转　W / ↑ 加速　Space 氮气加速</div>
     </div>
   </div>
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=5"></script>
+  <script src="game.js?v=7"></script>
 </body>
 </html>

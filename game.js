@@ -1,5 +1,5 @@
 /**
- * NEON DRIFT 3D - Three.js QQ飞车视角极速赛车引擎
+ * 3D 极速赛车 - 多主题自然场景探索 (Three.js 引擎)
  */
 
 // ── DOM 节点 ──
@@ -16,12 +16,14 @@ const leaderboardList = document.querySelector("#leaderboardList");
 const refreshRanks = document.querySelector("#refreshRanks");
 const serverDot = document.querySelector("#serverDot");
 const serverText = document.querySelector("#serverText");
+const brandTitle = document.querySelector("#brandTitle");
+const quickSceneSelect = document.querySelector("#quickSceneSelect");
 
-// ── 游戏基础变量 ──
+// ── 游戏运行变量 ──
 let running = false;
 let score = 0;
 let nitro = 100;
-let baseSpeed = 1.0;     // 正常行进速度倍率
+let baseSpeed = 1.0;
 let currentSpeed = 1.0;
 let boosting = false;
 let frame = 0;
@@ -31,6 +33,9 @@ let best = Number(localStorage.getItem("neonRushBest") || 0);
 let playerName = localStorage.getItem("neonRacerName") || "";
 playerNameInput.value = playerName;
 bestEl.textContent = best;
+
+// ── 当前场景主题 ──
+let currentTheme = localStorage.getItem("racerSceneTheme") || "country";
 
 // ── API 接口 ──
 const api = {
@@ -51,207 +56,386 @@ const api = {
 };
 
 // ═══════════════════════════════════════
-// THREE.JS 3D 场景初始化
+// THREE.JS 3D 场景与渲染器
 // ═══════════════════════════════════════
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x050614, 0.008);
-
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 800);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.25;
+renderer.toneMappingExposure = 1.2;
 
-// ── 灯光配置 ──
-const ambientLight = new THREE.AmbientLight(0x4466aa, 1.2);
+// ── 灯光组 ──
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-dirLight.position.set(20, 40, 20);
-scene.add(dirLight);
+const sunLight = new THREE.DirectionalLight(0xfffaed, 1.8);
+sunLight.position.set(30, 50, 20);
+scene.add(sunLight);
 
-// 玩家车尾霓虹光
-const playerLight = new THREE.PointLight(0x00ffff, 2.0, 15);
-scene.add(playerLight);
+// 赛车尾灯/底盘环境光
+const carFollowLight = new THREE.PointLight(0xffffff, 1.5, 12);
+scene.add(carFollowLight);
 
 // ═══════════════════════════════════════
-// 赛道与城市环境生成
+// 赛道参数与容器
 // ═══════════════════════════════════════
 const ROAD_WIDTH = 22;
 const LANE_COUNT = 4;
 const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
-const ROAD_SEGMENT_LENGTH = 120;
+const ROAD_SEGMENT_LENGTH = 140;
 const ROAD_SEGMENTS = 4;
 const TOTAL_ROAD_LEN = ROAD_SEGMENT_LENGTH * ROAD_SEGMENTS;
 
-const roadGroup = new THREE.Group();
-scene.add(roadGroup);
+const worldGroup = new THREE.Group();
+scene.add(worldGroup);
 
-// 创建赛道路面与护栏
 const roadSegments = [];
-function createRoadSegment(zOffset) {
+const sceneryObjects = []; // 树木/岩石/椰树等装饰物
+
+// ═══════════════════════════════════════
+// 场景主题配置数据 (THEMES)
+// ═══════════════════════════════════════
+const THEMES = {
+  country: {
+    name: "COUNTRY ROAD",
+    cnName: "🌾 乡间小路",
+    skyColor: 0x7db7f0,
+    fogColor: 0xa8d5a2,
+    fogDensity: 0.006,
+    ambientColor: 0xffffff,
+    sunColor: 0xfff6dd,
+    sunIntensity: 1.8,
+    roadColor: 0x3a3c42,
+    roadRoughness: 0.8,
+    terrainColor: 0x4f8f3c, // 翠绿草地
+    stripeColor: 0xffffff,
+    railColor: 0x8b5a2b,    // 木质栅栏
+    particleColor: 0xd4a373 // 泥土尘埃
+  },
+  island: {
+    name: "ISLAND ESCAPE",
+    cnName: "🏝️ 逃离荒岛",
+    skyColor: 0x38b6ff,
+    fogColor: 0x64d8cb,
+    fogDensity: 0.0055,
+    ambientColor: 0xe0f7fa,
+    sunColor: 0xfff0b3,
+    sunIntensity: 2.1,
+    roadColor: 0x424953,
+    roadRoughness: 0.6,
+    terrainColor: 0xe9d8a6, // 金黄细沙
+    stripeColor: 0xffea00,
+    railColor: 0xffffff,    // 沿海白护栏
+    particleColor: 0xf4a261 // 飞溅细沙
+  },
+  jungle: {
+    name: "JUNGLE ODYSSEY",
+    cnName: "🌴 丛林狂飙",
+    skyColor: 0x133c25,
+    fogColor: 0x1f4e38,
+    fogDensity: 0.0085,
+    ambientColor: 0xa7d7c5,
+    sunColor: 0xccffcc,
+    sunIntensity: 1.6,
+    roadColor: 0x2b221b,    // 泥泞深色古道
+    roadRoughness: 0.9,
+    terrainColor: 0x1a4329, // 茂密深林青苔
+    stripeColor: 0x88d49e,
+    railColor: 0x3d2b1f,    // 粗藤木桩
+    particleColor: 0x588157 // 丛林落叶水雾
+  },
+  river: {
+    name: "CANYON RIVER",
+    cnName: "🌊 沿河峡谷",
+    skyColor: 0x5c80bc,
+    fogColor: 0x8ecae6,
+    fogDensity: 0.0065,
+    ambientColor: 0xdde5ed,
+    sunColor: 0xffffff,
+    sunIntensity: 1.9,
+    roadColor: 0x33353a,
+    roadRoughness: 0.7,
+    terrainColor: 0x8a5a44, // 峡谷红褐岩石
+    stripeColor: 0xffffff,
+    railColor: 0x219ebc,    // 峡谷防撞导轨
+    particleColor: 0xade8f4 // 峡谷飞溅水珠
+  }
+};
+
+// ═══════════════════════════════════════
+// 自然景观程序化几何体生成工厂
+// ═══════════════════════════════════════
+
+// 1. 乡村大树
+function createCountryTree() {
+  const tree = new THREE.Group();
+  // 树干
+  const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 3.5, 7);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+  trunk.position.y = 1.75;
+  tree.add(trunk);
+
+  // 树冠 (上下两层丰满球冠)
+  const foliageGeo1 = new THREE.DodecahedronGeometry(2.2, 1);
+  const foliageMat1 = new THREE.MeshStandardMaterial({ color: 0x38761d, roughness: 0.8 });
+  const foliage1 = new THREE.Mesh(foliageGeo1, foliageMat1);
+  foliage1.position.y = 4.2;
+  tree.add(foliage1);
+
+  const foliageGeo2 = new THREE.DodecahedronGeometry(1.6, 1);
+  const foliageMat2 = new THREE.MeshStandardMaterial({ color: 0x4f9a2b, roughness: 0.8 });
+  const foliage2 = new THREE.Mesh(foliageGeo2, foliageMat2);
+  foliage2.position.y = 5.6;
+  tree.add(foliage2);
+
+  return tree;
+}
+
+// 2. 海岛椰子树
+function createPalmTree() {
+  const palm = new THREE.Group();
+  // 弯曲高挺的椰树树干
+  const trunkGeo = new THREE.CylinderGeometry(0.28, 0.55, 6.5, 7);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8b6f47, roughness: 0.9 });
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+  trunk.position.y = 3.25;
+  trunk.rotation.z = (Math.random() - 0.5) * 0.25;
+  palm.add(trunk);
+
+  // 放射状椰树叶
+  const leafCount = 6;
+  for (let i = 0; i < leafCount; i++) {
+    const leafGeo = new THREE.ConeGeometry(0.9, 3.8, 4);
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.7 });
+    const leaf = new THREE.Mesh(leafGeo, leafMat);
+    leaf.position.set(0, 6.3, 0);
+    leaf.rotation.z = Math.PI / 2.8;
+    leaf.rotation.y = (i / leafCount) * Math.PI * 2;
+    palm.add(leaf);
+  }
+
+  // 椰子果实
+  const coconutGeo = new THREE.SphereGeometry(0.35, 6, 6);
+  const coconutMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f });
+  const c1 = new THREE.Mesh(coconutGeo, coconutMat);
+  c1.position.set(0.3, 6.0, 0);
+  palm.add(c1);
+
+  return palm;
+}
+
+// 3. 丛林参天阔叶植物
+function createJunglePlant() {
+  const plant = new THREE.Group();
+  // 苔藓古木桩
+  const trunkGeo = new THREE.CylinderGeometry(0.6, 0.9, 4.0, 6);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x241e17, roughness: 1.0 });
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+  trunk.position.y = 2.0;
+  plant.add(trunk);
+
+  // 巨大热带阔叶
+  for (let i = 0; i < 5; i++) {
+    const leafGeo = new THREE.BoxGeometry(2.6, 0.12, 1.6);
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 0.6 });
+    const leaf = new THREE.Mesh(leafGeo, leafMat);
+    leaf.position.set(0, 3.8 + i * 0.4, 0);
+    leaf.rotation.y = (i / 5) * Math.PI * 2;
+    leaf.rotation.x = 0.3;
+    plant.add(leaf);
+  }
+  return plant;
+}
+
+// 4. 峡谷岩石峭壁与水流
+function createCanyonRock() {
+  const rock = new THREE.Group();
+  const rockGeo = new THREE.DodecahedronGeometry(3.0 + Math.random() * 2.5, 1);
+  const rockMat = new THREE.MeshStandardMaterial({
+    color: 0x7f4f24,
+    roughness: 0.95,
+    metalness: 0.1
+  });
+  const rMesh = new THREE.Mesh(rockGeo, rockMat);
+  rMesh.scale.set(1.0 + Math.random() * 0.5, 1.8 + Math.random() * 1.5, 1.0 + Math.random() * 0.5);
+  rMesh.position.y = 3.5;
+  rock.add(rMesh);
+  return rock;
+}
+
+// ═══════════════════════════════════════
+// 场景初始化与重构体系
+// ═══════════════════════════════════════
+function applyTheme(themeKey) {
+  const theme = THEMES[themeKey] || THEMES.country;
+  currentTheme = themeKey;
+  localStorage.setItem("racerSceneTheme", themeKey);
+
+  // 更新顶栏与选择器状态
+  if (brandTitle) brandTitle.textContent = theme.name;
+  if (quickSceneSelect) quickSceneSelect.value = themeKey;
+
+  document.querySelectorAll(".theme-chip").forEach(chip => {
+    chip.classList.toggle("active", chip.dataset.theme === themeKey);
+  });
+
+  // 更新天空背景与雾气
+  scene.background = new THREE.Color(theme.skyColor);
+  scene.fog = new THREE.FogExp2(theme.fogColor, theme.fogDensity);
+
+  ambientLight.color.setHex(theme.ambientColor);
+  sunLight.color.setHex(theme.sunColor);
+  sunLight.intensity = theme.sunIntensity;
+
+  // 清空旧赛道模型
+  while (worldGroup.children.length > 0) {
+    const obj = worldGroup.children[0];
+    worldGroup.remove(obj);
+  }
+  roadSegments.length = 0;
+  sceneryObjects.length = 0;
+
+  // 重建赛道与环境
+  for (let i = 0; i < ROAD_SEGMENTS; i++) {
+    buildRoadSegment(-i * ROAD_SEGMENT_LENGTH, theme);
+  }
+
+  // 建造两侧自然景观
+  populateScenery(themeKey);
+}
+
+function buildRoadSegment(zOffset, theme) {
   const seg = new THREE.Group();
   seg.position.z = zOffset;
 
-  // 1. 主路面 (沥青科技黑)
+  // 1. 广袤地表植被 (草地/沙滩/苔藓/河岸)
+  const terrainGeo = new THREE.PlaneGeometry(280, ROAD_SEGMENT_LENGTH);
+  const terrainMat = new THREE.MeshStandardMaterial({
+    color: theme.terrainColor,
+    roughness: 0.9
+  });
+  const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+  terrain.rotation.x = -Math.PI / 2;
+  terrain.position.y = -0.05;
+  seg.add(terrain);
+
+  // 如果是荒岛或峡谷场景，右侧加一条蔚蓝流动大河/海面
+  if (currentTheme === "island" || currentTheme === "river") {
+    const waterGeo = new THREE.PlaneGeometry(120, ROAD_SEGMENT_LENGTH);
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: currentTheme === "island" ? 0x0077b6 : 0x0096c7,
+      roughness: 0.1,
+      metalness: 0.8
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(ROAD_WIDTH / 2 + 65, 0.1, 0);
+    seg.add(water);
+  }
+
+  // 2. 主道路面
   const roadGeo = new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_SEGMENT_LENGTH);
   const roadMat = new THREE.MeshStandardMaterial({
-    color: 0x0a0c18,
-    roughness: 0.6,
-    metalness: 0.4
+    color: theme.roadColor,
+    roughness: theme.roadRoughness,
+    metalness: 0.2
   });
-  const roadMesh = new THREE.Mesh(roadGeo, roadMat);
-  roadMesh.rotation.x = -Math.PI / 2;
-  roadMesh.position.y = 0;
-  seg.add(roadMesh);
+  const road = new THREE.Mesh(roadGeo, roadMat);
+  road.rotation.x = -Math.PI / 2;
+  road.position.y = 0.02;
+  seg.add(road);
 
-  // 2. 车道分隔白线 (虚线)
+  // 3. 车道白线/黄线
   for (let i = 1; i < LANE_COUNT; i++) {
     const laneX = -ROAD_WIDTH / 2 + i * LANE_WIDTH;
     const stripeCount = 10;
     for (let s = 0; s < stripeCount; s++) {
-      const stripeGeo = new THREE.PlaneGeometry(0.25, 6);
-      const stripeMat = new THREE.MeshBasicMaterial({ color: 0x99ccff });
+      const stripeGeo = new THREE.PlaneGeometry(0.24, 6);
+      const stripeMat = new THREE.MeshBasicMaterial({ color: theme.stripeColor });
       const stripe = new THREE.Mesh(stripeGeo, stripeMat);
       stripe.rotation.x = -Math.PI / 2;
-      stripe.position.set(laneX, 0.02, -ROAD_SEGMENT_LENGTH / 2 + s * (ROAD_SEGMENT_LENGTH / stripeCount) + 3);
+      stripe.position.set(laneX, 0.04, -ROAD_SEGMENT_LENGTH / 2 + s * (ROAD_SEGMENT_LENGTH / stripeCount) + 3);
       seg.add(stripe);
     }
   }
 
-  // 3. 左右两侧霓虹护栏
-  const guardGeo = new THREE.BoxGeometry(0.4, 0.7, ROAD_SEGMENT_LENGTH);
-  
-  // 左侧粉紫光轨
-  const leftMat = new THREE.MeshBasicMaterial({ color: 0xff2ad4 });
-  const leftRail = new THREE.Mesh(guardGeo, leftMat);
-  leftRail.position.set(-ROAD_WIDTH / 2 - 0.2, 0.35, 0);
-  seg.add(leftRail);
+  // 4. 道路护栏 (不同主题自适应)
+  const railGeo = new THREE.BoxGeometry(0.35, 0.65, ROAD_SEGMENT_LENGTH);
+  const railMat = new THREE.MeshStandardMaterial({ color: theme.railColor, roughness: 0.7 });
 
-  // 右侧青蓝光轨
-  const rightMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
-  const rightRail = new THREE.Mesh(guardGeo, rightMat);
-  rightRail.position.set(ROAD_WIDTH / 2 + 0.2, 0.35, 0);
-  seg.add(rightRail);
+  const railL = new THREE.Mesh(railGeo, railMat);
+  railL.position.set(-ROAD_WIDTH / 2 - 0.2, 0.35, 0);
+  seg.add(railL);
 
-  // 4. 护栏立柱
-  for (let p = -ROAD_SEGMENT_LENGTH / 2; p <= ROAD_SEGMENT_LENGTH / 2; p += 15) {
-    const postGeo = new THREE.BoxGeometry(0.6, 1.2, 0.6);
-    const postMat = new THREE.MeshStandardMaterial({ color: 0x111628, metalness: 0.8 });
+  const railR = new THREE.Mesh(railGeo, railMat);
+  railR.position.set(ROAD_WIDTH / 2 + 0.2, 0.35, 0);
+  seg.add(railR);
+
+  // 护栏柱子
+  for (let p = -ROAD_SEGMENT_LENGTH / 2; p <= ROAD_SEGMENT_LENGTH / 2; p += 14) {
+    const postGeo = new THREE.BoxGeometry(0.5, 0.9, 0.5);
+    const postMat = new THREE.MeshStandardMaterial({ color: theme.railColor });
     const postL = new THREE.Mesh(postGeo, postMat);
-    postL.position.set(-ROAD_WIDTH / 2 - 0.3, 0.6, p);
+    postL.position.set(-ROAD_WIDTH / 2 - 0.2, 0.45, p);
     seg.add(postL);
 
     const postR = new THREE.Mesh(postGeo, postMat);
-    postR.position.set(ROAD_WIDTH / 2 + 0.3, 0.6, p);
+    postR.position.set(ROAD_WIDTH / 2 + 0.2, 0.45, p);
     seg.add(postR);
   }
 
-  roadGroup.add(seg);
+  worldGroup.add(seg);
   roadSegments.push(seg);
 }
 
-for (let i = 0; i < ROAD_SEGMENTS; i++) {
-  createRoadSegment(-i * ROAD_SEGMENT_LENGTH);
-}
+// 填充两侧景观植被与岩石
+function populateScenery(themeKey) {
+  const count = 40;
+  for (let i = 0; i < count; i++) {
+    let item;
+    if (themeKey === "country") {
+      item = createCountryTree();
+    } else if (themeKey === "island") {
+      item = createPalmTree();
+    } else if (themeKey === "jungle") {
+      item = createJunglePlant();
+    } else {
+      item = createCanyonRock();
+    }
 
-// ── 两侧赛博朋克摩天楼群 ──
-const buildings = [];
-const cityGroup = new THREE.Group();
-scene.add(cityGroup);
-
-const buildingColors = [0x090f26, 0x111633, 0x180b2c, 0x061528];
-const windowColors = [0x00ffff, 0xff00cc, 0xffea00, 0x3388ff];
-
-for (let i = 0; i < 48; i++) {
-  const bW = 10 + Math.random() * 14;
-  const bH = 30 + Math.random() * 70;
-  const bD = 12 + Math.random() * 16;
-  const bGeo = new THREE.BoxGeometry(bW, bH, bD);
-  const bMat = new THREE.MeshStandardMaterial({
-    color: buildingColors[Math.floor(Math.random() * buildingColors.length)],
-    roughness: 0.5,
-    metalness: 0.7
-  });
-  const bMesh = new THREE.Mesh(bGeo, bMat);
-
-  // 随机分布在左右两侧远景
-  const side = i % 2 === 0 ? -1 : 1;
-  const dist = ROAD_WIDTH / 2 + 16 + Math.random() * 45;
-  bMesh.position.set(side * dist, bH / 2 - 2, -Math.random() * TOTAL_ROAD_LEN);
-
-  // 顶楼霓虹发光招牌天际线
-  if (Math.random() > 0.4) {
-    const signGeo = new THREE.BoxGeometry(bW * 0.7, 1.5, 0.4);
-    const signMat = new THREE.MeshBasicMaterial({
-      color: windowColors[Math.floor(Math.random() * windowColors.length)]
-    });
-    const sign = new THREE.Mesh(signGeo, signMat);
-    sign.position.set(0, bH / 2 + 1, 0);
-    bMesh.add(sign);
+    const side = i % 2 === 0 ? -1 : 1;
+    // 分布在路旁安全距离
+    const offset = ROAD_WIDTH / 2 + 5 + Math.random() * 32;
+    item.position.set(side * offset, 0, -Math.random() * TOTAL_ROAD_LEN);
+    worldGroup.add(item);
+    sceneryObjects.push(item);
   }
-
-  cityGroup.add(bMesh);
-  buildings.push(bMesh);
 }
-
-// ── 动态星空粒子 ──
-const starCount = 300;
-const starGeo = new THREE.BufferGeometry();
-const starPos = new Float32Array(starCount * 3);
-for (let i = 0; i < starCount * 3; i += 3) {
-  starPos[i] = (Math.random() - 0.5) * 400;
-  starPos[i + 1] = 20 + Math.random() * 120;
-  starPos[i + 2] = -Math.random() * 400;
-}
-starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
-const starMat = new THREE.PointsMaterial({ color: 0x88ccff, size: 1.5, transparent: true, opacity: 0.8 });
-const starPoints = new THREE.Points(starGeo, starMat);
-scene.add(starPoints);
-
-// ── 氮气极速流线粒子 ──
-const streakCount = 80;
-const streakGeo = new THREE.BufferGeometry();
-const streakPos = new Float32Array(streakCount * 6); // 每条线2个顶点
-for (let i = 0; i < streakCount; i++) {
-  const idx = i * 6;
-  const x = (Math.random() - 0.5) * ROAD_WIDTH * 1.5;
-  const y = 0.5 + Math.random() * 6;
-  const z = -Math.random() * 100;
-  streakPos[idx] = x;
-  streakPos[idx + 1] = y;
-  streakPos[idx + 2] = z;
-  streakPos[idx + 3] = x;
-  streakPos[idx + 4] = y;
-  streakPos[idx + 5] = z - 6;
-}
-streakGeo.setAttribute("position", new THREE.BufferAttribute(streakPos, 3));
-const streakMat = new THREE.LineBasicMaterial({ color: 0x55ffff, transparent: true, opacity: 0 });
-const speedLines = new THREE.LineSegments(streakGeo, streakMat);
-scene.add(speedLines);
 
 // ═══════════════════════════════════════
-// 3D 玩家赛车模型构建 (QQ飞车超跑造型)
+// 3D 玩家赛车与敌车 (QQ 飞车超跑造型)
 // ═══════════════════════════════════════
-function createSuperCar(isPlayer = true, primaryColor = 0x00f0ff) {
+function createSuperCar(isPlayer = true, primaryColor = 0x00f3ff) {
   const carGroup = new THREE.Group();
 
-  // 1. 车身底盘主壳体 (低趴流线型)
+  // 车身底盘
   const bodyGeo = new THREE.BoxGeometry(2.1, 0.45, 4.4);
   const bodyMat = new THREE.MeshStandardMaterial({
     color: primaryColor,
-    roughness: 0.2,
-    metalness: 0.8
+    roughness: 0.25,
+    metalness: 0.75
   });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
   body.position.y = 0.45;
   carGroup.add(body);
 
-  // 2. 驾驶舱风挡玻璃 (流体黑色带青光)
+  // 驾驶舱弧形风挡
   const cabinGeo = new THREE.BoxGeometry(1.4, 0.42, 2.0);
   const cabinMat = new THREE.MeshStandardMaterial({
-    color: 0x081020,
+    color: 0x0a1020,
     roughness: 0.1,
     metalness: 0.95
   });
@@ -259,67 +443,54 @@ function createSuperCar(isPlayer = true, primaryColor = 0x00f0ff) {
   cabin.position.set(0, 0.78, -0.2);
   carGroup.add(cabin);
 
-  // 3. 车头下压力铲 (Front Splitter)
+  // 前下压力唇
   const noseGeo = new THREE.BoxGeometry(1.9, 0.15, 0.8);
-  const noseMat = new THREE.MeshStandardMaterial({ color: 0x111624, metalness: 0.9 });
+  const noseMat = new THREE.MeshStandardMaterial({ color: 0x1a1a24, metalness: 0.8 });
   const nose = new THREE.Mesh(noseGeo, noseMat);
   nose.position.set(0, 0.28, -2.2);
   carGroup.add(nose);
 
-  // 4. 竞技大尾翼 (GT Wing)
+  // 尾翼
   const wingGroup = new THREE.Group();
   wingGroup.position.set(0, 0.9, 1.8);
-  const spoilerMat = new THREE.MeshStandardMaterial({ color: 0x111624, metalness: 0.8 });
-  
-  // 尾翼板
   const wingBladeGeo = new THREE.BoxGeometry(2.3, 0.08, 0.45);
   const wingBladeMat = new THREE.MeshBasicMaterial({ color: primaryColor });
   const wingBlade = new THREE.Mesh(wingBladeGeo, wingBladeMat);
   wingBlade.position.y = 0.4;
   wingGroup.add(wingBlade);
 
-  // 左右立柱
   const postGeo = new THREE.BoxGeometry(0.08, 0.45, 0.2);
-  const p1 = new THREE.Mesh(postGeo, spoilerMat);
+  const p1 = new THREE.Mesh(postGeo, noseMat);
   p1.position.set(-0.7, 0.2, 0);
   wingGroup.add(p1);
-  const p2 = new THREE.Mesh(postGeo, spoilerMat);
+  const p2 = new THREE.Mesh(postGeo, noseMat);
   p2.position.set(0.7, 0.2, 0);
   wingGroup.add(p2);
   carGroup.add(wingGroup);
 
-  // 5. 四只车轮 (带青色发光轮毂)
+  // 四只车轮
   const wheels = [];
-  const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.35, 18);
+  const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.35, 16);
   wheelGeo.rotateZ(Math.PI / 2);
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x15151e, roughness: 0.8 });
-  const rimMat = new THREE.MeshBasicMaterial({ color: primaryColor });
 
   const wheelPositions = [
-    [-1.1, 0.42, -1.3], // 前左
-    [ 1.1, 0.42, -1.3], // 前右
-    [-1.15, 0.44, 1.3], // 后左
-    [ 1.15, 0.44, 1.3]  // 后右
+    [-1.1, 0.42, -1.3],
+    [ 1.1, 0.42, -1.3],
+    [-1.15, 0.44, 1.3],
+    [ 1.15, 0.44, 1.3]
   ];
 
-  wheelPositions.forEach((pos, idx) => {
+  wheelPositions.forEach(pos => {
     const wGroup = new THREE.Group();
     wGroup.position.set(pos[0], pos[1], pos[2]);
     const wMesh = new THREE.Mesh(wheelGeo, wheelMat);
     wGroup.add(wMesh);
-
-    // 轮毂外圈霓虹灯
-    const rimGeo = new THREE.RingGeometry(0.2, 0.28, 12);
-    const rim = new THREE.Mesh(rimGeo, rimMat);
-    rim.position.x = pos[0] > 0 ? 0.18 : -0.18;
-    rim.rotation.y = pos[0] > 0 ? Math.PI / 2 : -Math.PI / 2;
-    wGroup.add(rim);
-
     carGroup.add(wGroup);
     wheels.push(wGroup);
   });
 
-  // 6. 前大灯发光片
+  // 前大灯与后尾灯
   const headLightGeo = new THREE.BoxGeometry(0.35, 0.1, 0.1);
   const headLightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const hlL = new THREE.Mesh(headLightGeo, headLightMat);
@@ -329,33 +500,25 @@ function createSuperCar(isPlayer = true, primaryColor = 0x00f0ff) {
   hlR.position.set(0.7, 0.45, -2.15);
   carGroup.add(hlR);
 
-  // 7. 尾部发光贯穿尾灯
   const tailGeo = new THREE.BoxGeometry(1.8, 0.12, 0.1);
   const tailMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
   const tail = new THREE.Mesh(tailGeo, tailMat);
   tail.position.set(0, 0.52, 2.18);
   carGroup.add(tail);
 
-  // 8. 双氮气推进器尾喷口 (Thrusters)
+  // 氮气喷管
   const thrusters = [];
   if (isPlayer) {
-    const flameGeo = new THREE.ConeGeometry(0.25, 2.2, 12);
+    const flameGeo = new THREE.ConeGeometry(0.24, 2.2, 12);
     flameGeo.rotateX(-Math.PI / 2);
-    const flameMat = new THREE.MeshBasicMaterial({
-      color: 0x00ffff,
-      transparent: true,
-      opacity: 0.0
-    });
-    
-    // 左喷管
+    const flameMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0 });
     const fL = new THREE.Mesh(flameGeo, flameMat);
     fL.position.set(-0.5, 0.4, 3.2);
     carGroup.add(fL);
     thrusters.push(fL);
 
-    // 右喷管
     const fR = new THREE.Mesh(flameGeo, flameMat.clone());
-    fR.material.color.setHex(0xd000ff);
+    fR.material.color.setHex(0xff3399);
     fR.position.set(0.5, 0.4, 3.2);
     carGroup.add(fR);
     thrusters.push(fR);
@@ -364,26 +527,40 @@ function createSuperCar(isPlayer = true, primaryColor = 0x00f0ff) {
   return { group: carGroup, wheels, thrusters };
 }
 
-// 实例化玩家赛车
-const player = createSuperCar(true, 0x00f3ff);
+// 玩家赛车
+const player = createSuperCar(true, 0x00e5ff);
 scene.add(player.group);
 player.group.position.set(0, 0, 0);
 
-// 玩家赛车物理状态
-const carState = {
-  x: 0,
-  z: 0,
-  velocityX: 0,
-  steering: 0,
-  roll: 0,
-  yaw: 0
+// ── 遵循真实汽车物理动力学的赛车状态 ──
+const carPhysics = {
+  x: 0,                   // 横向位置 (m)
+  vx: 0,                  // 横向速度 (m/s)
+  ax: 0,                  // 横向加速度 (m/s^2)
+  steerAngle: 0,          // 前轮物理转向角 (rad)
+  roll: 0,                // 车身悬挂侧倾角 (rad)
+  rollVel: 0,             // 侧倾角速度 (rad/s)
+  yaw: 0                  // 车头朝向航向角 (rad)
+};
+
+// 物理参数配置 (依据超跑真实悬挂与转向标定，避免剧烈摇晃)
+const PHYS = {
+  maxSteer: 0.12,          // 最大前轮转向角 (~6.8度，高速行驶微打角)
+  steerRate: 2.8,          // 打角角速度
+  steerReturn: 4.5,        // 自回正角速度
+  lateralFriction: 4.8,    // 轮胎侧向附着摩擦阻尼
+  lateralGripFactor: 1.25, // 侧向抓地向心力系数
+  suspensionOmega: 7.2,    // 悬挂弹簧角频率
+  suspensionZeta: 0.98,    // 悬挂阻尼比 (接近临界阻尼，消除摇摆晃动)
+  rollMomentFactor: 0.04,  // 离心力对车身侧倾力矩影响系数
+  maxRollAngle: 0.05       // 物理侧倾角限位 (~2.8度，稳定沉着)
 };
 
 // ═══════════════════════════════════════
-// 敌车系统 (Traffic)
+// 敌车与金币管理
 // ═══════════════════════════════════════
 const traffic = [];
-const trafficColors = [0xff2255, 0xffea00, 0xa020f0, 0x00ff88, 0xff7700];
+const trafficColors = [0xff3366, 0xffbb00, 0x8338ec, 0x2ec4b6, 0xf77f00];
 
 function spawnTraffic() {
   const laneIndex = Math.floor(Math.random() * LANE_COUNT);
@@ -391,18 +568,12 @@ function spawnTraffic() {
   const color = trafficColors[Math.floor(Math.random() * trafficColors.length)];
   const enemy = createSuperCar(false, color);
   
-  enemy.group.position.set(laneX, 0, -180);
-  enemy.speed = 0.35 + Math.random() * 0.4;
-  enemy.width = 2.2;
-  enemy.length = 4.4;
-
+  enemy.group.position.set(laneX, 0, -200);
+  enemy.speed = 0.35 + Math.random() * 0.35;
   scene.add(enemy.group);
   traffic.push(enemy);
 }
 
-// ═══════════════════════════════════════
-// 3D 浮空能量金币 (Energy Coins)
-// ═══════════════════════════════════════
 const coins = [];
 const coinGeo = new THREE.CylinderGeometry(0.85, 0.85, 0.22, 16);
 coinGeo.rotateX(Math.PI / 2);
@@ -410,26 +581,24 @@ const coinMat = new THREE.MeshStandardMaterial({
   color: 0xffd700,
   roughness: 0.2,
   metalness: 0.9,
-  emissive: 0xffaa00,
-  emissiveIntensity: 0.5
+  emissive: 0xff9900,
+  emissiveIntensity: 0.4
 });
 
 function spawnCoin() {
   const laneIndex = Math.floor(Math.random() * LANE_COUNT);
   const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
   const coinMesh = new THREE.Mesh(coinGeo, coinMat);
-  coinMesh.position.set(laneX, 0.9, -210);
+  coinMesh.position.set(laneX, 0.9, -220);
   scene.add(coinMesh);
   coins.push(coinMesh);
 }
 
-// ═══════════════════════════════════════
-// 尾部火焰粒子与撞击火花
-// ═══════════════════════════════════════
+// 粒子系统
 const particles = [];
 const pGeo = new THREE.SphereGeometry(0.12, 6, 6);
 
-function createSpark(x, y, z, colorHex, count = 15) {
+function createSpark(x, y, z, colorHex, count = 12) {
   for (let i = 0; i < count; i++) {
     const pMat = new THREE.MeshBasicMaterial({ color: colorHex });
     const pMesh = new THREE.Mesh(pGeo, pMat);
@@ -437,16 +606,16 @@ function createSpark(x, y, z, colorHex, count = 15) {
     scene.add(pMesh);
     particles.push({
       mesh: pMesh,
-      vx: (Math.random() - 0.5) * 0.8,
-      vy: Math.random() * 0.6 + 0.1,
-      vz: (Math.random() - 0.5) * 0.8,
+      vx: (Math.random() - 0.5) * 0.7,
+      vy: Math.random() * 0.5 + 0.1,
+      vz: (Math.random() - 0.5) * 0.7,
       life: 1.0
     });
   }
 }
 
 // ═══════════════════════════════════════
-// 游戏开始与重置
+// 游戏生命周期控制
 // ═══════════════════════════════════════
 function resetGame() {
   traffic.forEach(t => scene.remove(t.group));
@@ -462,8 +631,13 @@ function resetGame() {
   nitro = 100;
   baseSpeed = 1.0;
   frame = 0;
-  carState.x = 0;
-  carState.velocityX = 0;
+  carPhysics.x = 0;
+  carPhysics.vx = 0;
+  carPhysics.ax = 0;
+  carPhysics.steerAngle = 0;
+  carPhysics.roll = 0;
+  carPhysics.rollVel = 0;
+  carPhysics.yaw = 0;
   player.group.position.set(0, 0, 0);
   player.group.rotation.set(0, 0, 0);
 
@@ -472,7 +646,7 @@ function resetGame() {
 }
 
 function startGame() {
-  playerName = playerNameInput.value.trim() || "极速车神";
+  playerName = playerNameInput.value.trim() || "自然漫游者";
   localStorage.setItem("neonRacerName", playerName);
   resetGame();
   running = true;
@@ -486,33 +660,30 @@ async function endGame() {
   localStorage.setItem("neonRushBest", best);
   bestEl.textContent = best;
   title.textContent = "CRASHED";
-  message.innerHTML = `本次竞速得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>成绩正在提交服务器...`;
-  document.querySelector("#start").textContent = "再来一局";
+  message.innerHTML = `本次探索得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>成绩正在同步...`;
+  document.querySelector("#start").textContent = "再次出发";
   overlay.classList.remove("hidden");
 
-  // 车辆撞毁飞起特效
-  player.group.rotation.x = 0.5;
-  player.group.position.y = 1.5;
-  createSpark(player.group.position.x, 1.0, player.group.position.z, 0xff0044, 40);
+  createSpark(player.group.position.x, 1.0, player.group.position.z, 0xff0044, 35);
 
   try {
     await api.post("/api/scores", { name: playerName, score: finalScore });
-    message.innerHTML = `本次竞速得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>成绩已收录至排行榜！`;
+    message.innerHTML = `本次探索得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>成绩已记录至排行榜！`;
     await loadLeaderboard();
   } catch (error) {
-    message.innerHTML = `本次竞速得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>服务器离线，已保存至本机最佳。`;
+    message.innerHTML = `本次探索得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>本地最高分已保存。`;
     setServerState(false);
   }
 }
 
 // ═══════════════════════════════════════
-// 游戏主逻辑每帧更新
+// 核心更新循环 (解决灵敏度过高问题)
 // ═══════════════════════════════════════
 function update() {
   if (!running) return;
   frame++;
 
-  // 1. 速度与氮气 (NITRO)
+  // 1. 速度与氮气
   const accelerating = keys.KeyW || keys.ArrowUp;
   boosting = (keys.Space || keys.boost) && nitro > 0;
   nitro = boosting ? Math.max(0, nitro - 0.7) : Math.min(100, nitro + 0.12);
@@ -524,47 +695,76 @@ function update() {
   score += currentSpeed * 0.45;
   nitroBar.style.width = `${nitro}%`;
   scoreEl.textContent = Math.floor(score);
-  speedEl.textContent = Math.floor(currentSpeed * 125); // KM/H 仪表显示
+  speedEl.textContent = Math.floor(currentSpeed * 125);
 
-  // 2. 玩家赛车横向控制与 QQ飞车侧倾 (Roll & Yaw)
+  // 2. 遵循真实汽车动力学与悬挂物理定律的转向控制
   const turnLeft = keys.ArrowLeft || keys.KeyA || keys.left;
   const turnRight = keys.ArrowRight || keys.KeyD || keys.right;
 
-  if (turnLeft) carState.velocityX -= 0.045;
-  if (turnRight) carState.velocityX += 0.045;
-  carState.velocityX *= 0.88; // 阻尼
-  carState.x += carState.velocityX * 10;
+  const dt = 1 / 60; // 物理步长
 
-  // 赛道边缘限制
+  // 转向轮输入物理积分 (阿克曼转向角平滑过渡与主销后倾自回正)
+  let targetSteer = 0;
+  if (turnLeft) targetSteer = -PHYS.maxSteer;
+  else if (turnRight) targetSteer = PHYS.maxSteer;
+
+  const steerSpeed = targetSteer === 0 ? PHYS.steerReturn : PHYS.steerRate;
+  carPhysics.steerAngle += (targetSteer - carPhysics.steerAngle) * Math.min(1.0, steerSpeed * dt * 4.0);
+
+  // 轮胎侧向抓地力与向心加速度计算
+  const targetAx = carPhysics.steerAngle * currentSpeed * PHYS.lateralGripFactor * 26.0;
+  carPhysics.ax += (targetAx - carPhysics.ax) * 0.18; // 轮胎变形弹性迟滞
+
+  // 牛顿运动定律：横向受力 dv_x / dt = a_x - 摩擦阻尼
+  carPhysics.vx += (carPhysics.ax - carPhysics.vx * PHYS.lateralFriction) * dt * 8.0;
+
+  // 横向物理位移
+  carPhysics.x += carPhysics.vx * dt * 5.0;
+
+  // 赛道边缘阻挡与微弹性反弹
   const maxBound = ROAD_WIDTH / 2 - 1.8;
-  if (carState.x < -maxBound) {
-    carState.x = -maxBound;
-    carState.velocityX = 0;
+  if (carPhysics.x < -maxBound) {
+    carPhysics.x = -maxBound;
+    carPhysics.vx = -carPhysics.vx * 0.2;
+    carPhysics.ax = 0;
   }
-  if (carState.x > maxBound) {
-    carState.x = maxBound;
-    carState.velocityX = 0;
+  if (carPhysics.x > maxBound) {
+    carPhysics.x = maxBound;
+    carPhysics.vx = -carPhysics.vx * 0.2;
+    carPhysics.ax = 0;
   }
 
-  // 飞车车身侧倾角度 (漂移动态)
-  carState.roll = -carState.velocityX * 1.8;
-  carState.yaw = -carState.velocityX * 0.9;
-  player.group.position.x = carState.x;
-  player.group.rotation.z = carState.roll;
-  player.group.rotation.y = carState.yaw;
+  // 悬挂系统二阶弹簧-阻尼动力学 (消除左右剧烈摇摆打摆子，模拟真实底盘质量弹簧系统)
+  // 方程： I*d2phi/dt2 + c*dphi/dt + k*phi = M_centrifugal
+  const centrifugalForce = -carPhysics.ax * PHYS.rollMomentFactor;
+  const rollSpringForce = -Math.pow(PHYS.suspensionOmega, 2) * carPhysics.roll;
+  const rollDamperForce = -2 * PHYS.suspensionZeta * PHYS.suspensionOmega * carPhysics.rollVel;
+  const rollAcc = centrifugalForce + rollSpringForce + rollDamperForce;
 
-  // 转向前轮打角
-  const steerAngle = Math.max(-0.4, Math.min(0.4, carState.velocityX * 3.5));
-  player.wheels[0].rotation.y = steerAngle;
-  player.wheels[1].rotation.y = steerAngle;
+  carPhysics.rollVel += rollAcc * dt * 2.0;
+  carPhysics.roll += carPhysics.rollVel * dt * 2.0;
+  carPhysics.roll = Math.max(-PHYS.maxRollAngle, Math.min(PHYS.maxRollAngle, carPhysics.roll));
 
-  // 四轮高速滚转
+  // 车身航向角 (Yaw)：严格根据速度矢量方向自然偏转
+  const targetYaw = Math.atan2(carPhysics.vx * 0.35, currentSpeed * 1.5);
+  carPhysics.yaw += (targetYaw - carPhysics.yaw) * 0.15;
+
+  // 应用位移与姿态到 3D 模型
+  player.group.position.x = carPhysics.x;
+  player.group.rotation.z = carPhysics.roll;
+  player.group.rotation.y = carPhysics.yaw;
+
+  // 前轮打角转向
+  player.wheels[0].rotation.y = carPhysics.steerAngle * 1.5;
+  player.wheels[1].rotation.y = carPhysics.steerAngle * 1.5;
+
+  // 四轮旋转
   const wheelSpin = currentSpeed * 0.6;
   player.wheels.forEach(w => {
     w.children[0].rotation.x += wheelSpin;
   });
 
-  // 3. 氮气推进火焰动画
+  // 3. 氮气推进火焰
   if (boosting) {
     const pulse = 1.0 + Math.random() * 0.4;
     player.thrusters[0].material.opacity = 0.85;
@@ -572,19 +772,16 @@ function update() {
     player.thrusters[0].scale.set(pulse, pulse * 1.2, pulse);
     player.thrusters[1].scale.set(pulse, pulse * 1.2, pulse);
 
-    // 喷射粒子
-    if (frame % 2 === 0) {
-      createSpark(carState.x - 0.5, 0.4, 2.8, 0x00f3ff, 2);
-      createSpark(carState.x + 0.5, 0.4, 2.8, 0xd000ff, 2);
+    if (frame % 3 === 0) {
+      const themeData = THEMES[currentTheme] || THEMES.country;
+      createSpark(carPhysics.x, 0.4, 2.8, themeData.particleColor, 2);
     }
-    streakMat.opacity = Math.min(0.8, streakMat.opacity + 0.1);
   } else {
     player.thrusters[0].material.opacity = 0;
     player.thrusters[1].material.opacity = 0;
-    streakMat.opacity = Math.max(0, streakMat.opacity - 0.08);
   }
 
-  // 4. 赛道与建筑无限循环向后流转
+  // 4. 赛道与自然景物无限循环
   const moveZ = currentSpeed * 1.8;
   roadSegments.forEach(seg => {
     seg.position.z += moveZ;
@@ -593,18 +790,18 @@ function update() {
     }
   });
 
-  buildings.forEach(b => {
-    b.position.z += moveZ * 0.75;
-    if (b.position.z > 20) {
-      b.position.z -= TOTAL_ROAD_LEN;
+  sceneryObjects.forEach(item => {
+    item.position.z += moveZ;
+    if (item.position.z > 25) {
+      item.position.z -= TOTAL_ROAD_LEN;
     }
   });
 
-  // 5. 敌车生成与运动
-  if (frame % Math.max(45, Math.floor(90 - currentSpeed * 15)) === 0) {
+  // 5. 敌车生成与碰撞
+  if (frame % Math.max(50, Math.floor(95 - currentSpeed * 12)) === 0) {
     spawnTraffic();
   }
-  if (Math.random() < 0.035) {
+  if (Math.random() < 0.032) {
     spawnCoin();
   }
 
@@ -613,24 +810,21 @@ function update() {
     enemy.group.position.z += moveZ - enemy.speed * 1.4;
     enemy.wheels.forEach(w => { w.children[0].rotation.x += 0.3; });
 
-    // 碰撞检测 (3D AABB 盒)
-    const pPos = player.group.position;
-    const ePos = enemy.group.position;
-    const dx = Math.abs(pPos.x - ePos.x);
-    const dz = Math.abs(pPos.z - ePos.z);
+    // 3D 碰撞检测
+    const dx = Math.abs(player.group.position.x - enemy.group.position.x);
+    const dz = Math.abs(player.group.position.z - enemy.group.position.z);
 
     if (dx < 1.9 && dz < 3.8) {
       return endGame();
     }
 
-    // 超出屏幕后移除
     if (enemy.group.position.z > 25) {
       scene.remove(enemy.group);
       traffic.splice(i, 1);
     }
   }
 
-  // 6. 金币收集检测
+  // 6. 金币收集
   for (let i = coins.length - 1; i >= 0; i--) {
     const coin = coins[i];
     coin.position.z += moveZ;
@@ -651,7 +845,7 @@ function update() {
     }
   }
 
-  // 7. 粒子更新
+  // 7. 粒子衰减
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.mesh.position.x += p.vx;
@@ -665,8 +859,8 @@ function update() {
     }
   }
 
-  // 8. QQ飞车式 第三人称跟车视角 (Smooth Chase Camera)
-  const targetCamX = carState.x * 0.72;
+  // 8. 第三人称跟随相机 (Chase Camera)
+  const targetCamX = carPhysics.x * 0.72;
   const targetCamY = boosting ? 3.4 : 3.6;
   const targetCamZ = boosting ? 8.6 : 8.0;
 
@@ -674,13 +868,12 @@ function update() {
   camera.position.y += (targetCamY - camera.position.y) * 0.1;
   camera.position.z += (targetCamZ - camera.position.z) * 0.1;
 
-  // 开启氮气时 FOV 广角推背感 (大喷拉伸镜头)
-  const targetFov = boosting ? 76 : 60;
+  const targetFov = boosting ? 74 : 60;
   camera.fov += (targetFov - camera.fov) * 0.08;
   camera.updateProjectionMatrix();
 
-  camera.lookAt(carState.x * 0.45, 1.2, -18);
-  playerLight.position.set(carState.x, 2, 2);
+  camera.lookAt(carPhysics.x * 0.45, 1.2, -18);
+  carFollowLight.position.set(carPhysics.x, 2, 2);
 }
 
 // ═══════════════════════════════════════
@@ -693,17 +886,17 @@ function render() {
 }
 
 // ═══════════════════════════════════════
-// 排行榜与服务器状态对接
+// 排行榜对接
 // ═══════════════════════════════════════
 function setServerState(online) {
   serverDot.classList.toggle("online", online);
   serverDot.classList.toggle("offline", !online);
-  serverText.textContent = online ? "服务器在线" : "单机模式";
+  serverText.textContent = online ? "在线" : "单机";
 }
 
 function renderLeaderboard(scores) {
   if (!scores.length) {
-    leaderboardList.innerHTML = "<li>暂无战绩，等你来破纪录！</li>";
+    leaderboardList.innerHTML = "<li>暂无纪录，等你来创奇迹！</li>";
     return;
   }
   leaderboardList.innerHTML = scores.map((item, index) => (
@@ -728,12 +921,12 @@ async function loadLeaderboard() {
     renderLeaderboard(data.scores || []);
   } catch (error) {
     setServerState(false);
-    leaderboardList.innerHTML = "<li>服务器未连上，本地纪录有效。</li>";
+    leaderboardList.innerHTML = "<li>服务器未连接，当前记录本机分数。</li>";
   }
 }
 
 // ═══════════════════════════════════════
-// 事件绑定 (键盘 + 触屏)
+// 事件绑定
 // ═══════════════════════════════════════
 function bindButton(selector, key) {
   const element = document.querySelector(selector);
@@ -763,12 +956,26 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+// 场景切换按钮事件
+document.querySelectorAll(".theme-chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    applyTheme(chip.dataset.theme);
+  });
+});
+
+if (quickSceneSelect) {
+  quickSceneSelect.addEventListener("change", (e) => {
+    applyTheme(e.target.value);
+  });
+}
+
 bindButton("#left", "left");
 bindButton("#right", "right");
 bindButton("#boost", "boost");
 document.querySelector("#start").addEventListener("click", startGame);
 refreshRanks.addEventListener("click", loadLeaderboard);
 
-// 启动
+// 初始化场景与启动渲染
+applyTheme(currentTheme);
 loadLeaderboard();
 render();
