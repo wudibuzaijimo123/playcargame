@@ -1401,8 +1401,20 @@ function update() {
 // ═══════════════════════════════════════
 // 渲染循环与音频状态自动保持
 // ═══════════════════════════════════════
-function render() {
-  update();
+const FIXED_STEP_MS = 1000 / 60;
+let previousFrameTime = 0;
+let updateAccumulator = 0;
+
+function render(timestamp = performance.now()) {
+  if (!previousFrameTime) previousFrameTime = timestamp;
+  // Cap catch-up after tab suspension and simulate at 60 Hz on every display.
+  const elapsed = Math.min(timestamp - previousFrameTime, 100);
+  previousFrameTime = timestamp;
+  updateAccumulator += elapsed;
+  while (updateAccumulator >= FIXED_STEP_MS) {
+    update();
+    updateAccumulator -= FIXED_STEP_MS;
+  }
   renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
