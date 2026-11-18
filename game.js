@@ -2151,8 +2151,10 @@ function update() {
   if (frame % 4 === 0) drawMinimap();
   const carWorldX = carPhysics.x + trackCurve(raceDistance);
   const targetCamX = carWorldX;
-  const targetCamY = boosting ? 3.3 : 3.5;
-  const targetCamZ = boosting ? 6.5 : 6.0; // 紧贴车尾
+  // 速度感：跑得越快镜头微微拉远、抬高，车在画面里会有一个"往前顶"的过程
+  const speedRatio = Math.min(1, currentSpeed / (200 / 90));
+  const targetCamY = (boosting ? 3.3 : 3.5) + speedRatio * 0.35;
+  const targetCamZ = (boosting ? 6.5 : 6.0) + speedRatio * 1.6;
 
   camera.position.x += (targetCamX - camera.position.x) * 0.16;
   camera.position.y += (targetCamY - camera.position.y) * 0.1;
@@ -2396,6 +2398,24 @@ window.addEventListener("keydown", event => {
 
 window.addEventListener("keyup", event => {
   keys[event.code] = false;
+});
+
+// 切后台/窗口失焦时清空所有输入，避免油门或加速键"卡住"导致没人踩也在跑
+function releaseAllInputs() {
+  Object.keys(keys).forEach(code => { keys[code] = false; });
+  throttleHeld = false;
+  brakeHeld = false;
+  if (typeof keys !== "undefined") {
+    keys.throttle = false;
+    keys.brake = false;
+    keys.boost = false;
+    keys.left = false;
+    keys.right = false;
+  }
+}
+window.addEventListener("blur", releaseAllInputs);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) releaseAllInputs();
 });
 
 window.addEventListener("resize", () => {
