@@ -56,29 +56,53 @@ const api = {
 };
 
 // ═══════════════════════════════════════
-// 100% 稳定运行的真实公路自驾车载音乐与声效系统
+// 100% 稳定运行的真实公路自驾车载音乐与声效系统 (HTML5 Audio + WebAudio 深度双引擎)
 // ═══════════════════════════════════════
 class MusicEngine {
   constructor() {
+    this.enabled = true;
+    this.bgmAudio = null;
+    this.crashAudio = null;
+    this.coinAudio = null;
     this.ctx = null;
-    this.masterGain = null;
     this.engineGain = null;
     this.engineOsc = null;
-    this.roadGain = null;
-    this.enabled = true;
-    this.bgmTimer = null;
-    this.step = 0;
+    this.initAudioElements();
+  }
+
+  initAudioElements() {
+    try {
+      this.bgmAudio = document.querySelector("#bgmAudio") || new Audio("assets/bgm.wav");
+      this.bgmAudio.loop = true;
+      this.bgmAudio.volume = 0.95;
+
+      this.crashAudio = document.querySelector("#crashAudio") || new Audio("assets/crash.wav");
+      this.crashAudio.volume = 1.0;
+
+      this.coinAudio = document.querySelector("#coinAudio") || new Audio("assets/coin.wav");
+      this.coinAudio.volume = 0.75;
+    } catch (e) {
+      console.warn("Audio elements init warning:", e);
+    }
   }
 
   ensureContext() {
+    if (!this.bgmAudio) this.initAudioElements();
+
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      this.ctx = new AudioCtx();
-      this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
-      this.masterGain.connect(this.ctx.destination);
-      this.setupEngineSound();
+      if (AudioCtx) {
+        try {
+          this.ctx = new AudioCtx();
+          // iOS Safari 专用的 1-sample 静音解锁 buffer
+          const buffer = this.ctx.createBuffer(1, 1, 22050);
+          const source = this.ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(this.ctx.destination);
+          source.start(0);
+          this.setupEngineSound();
+        } catch (e) {}
+      }
     }
     if (this.ctx && this.ctx.state === "suspended") {
       this.ctx.resume().catch(() => {});
@@ -88,16 +112,15 @@ class MusicEngine {
   setupEngineSound() {
     if (!this.ctx) return;
     try {
-      // 电动车轻盈科技蜂鸣与轮胎胎噪
       this.engineOsc = this.ctx.createOscillator();
       this.engineOsc.type = "sine";
       this.engineOsc.frequency.setValueAtTime(95, this.ctx.currentTime);
 
       this.engineGain = this.ctx.createGain();
-      this.engineGain.gain.setValueAtTime(0.09, this.ctx.currentTime);
+      this.engineGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
 
       this.engineOsc.connect(this.engineGain);
-      this.engineGain.connect(this.masterGain);
+      this.engineGain.connect(this.ctx.destination);
       this.engineOsc.start();
     } catch (e) {}
   }
@@ -105,207 +128,89 @@ class MusicEngine {
   updateEngine(speed, isBoosting) {
     if (!this.ctx || !this.engineOsc || !this.enabled) return;
     try {
-      // 电动车加速声音从 100Hz 平滑拉升到 280Hz
       const targetFreq = 95 + speed * 95 + (isBoosting ? 85 : 0);
       this.engineOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
     } catch (e) {}
   }
 
-  stopBGM() {
-    if (this.bgmTimer) {
-      clearInterval(this.bgmTimer);
-      this.bgmTimer = null;
+  startBGM() {
+    if (!this.enabled) return;
+    this.ensureContext();
+    if (this.bgmAudio) {
+      try {
+        this.bgmAudio.currentTime = 0;
+        const playPromise = this.bgmAudio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(e => {
+            console.log("Audio play promise info:", e);
+          });
+        }
+      } catch (e) {}
     }
   }
 
-  startBGM() {
-    this.ensureContext();
-    if (!this.ctx || !this.enabled) return;
-    if (this.bgmTimer) return;
-
-    // 清新动听的公路自驾车载音乐旋律 (晴朗夏日自驾旅行)
-    const melody = [
-      523.25, 0, 587.33, 659.25, 783.99, 0, 659.25, 587.33,
-      523.25, 0, 440.0, 523.25, 587.33, 0, 523.25, 0,
-      659.25, 0, 783.99, 880.0, 1046.5, 0, 880.0, 783.99,
-      659.25, 0, 783.99, 659.25, 523.25, 0, 587.33, 0
-    ];
-
-    // C - G - Am - F 经典公路自驾流行和弦低音
-    const bass = [
-      130.81, 130.81, 130.81, 130.81, 130.81, 130.81, 130.81, 130.81, // C
-      98.00, 98.00, 98.00, 98.00, 98.00, 98.00, 98.00, 98.00,         // G
-      110.00, 110.00, 110.00, 110.00, 110.00, 110.00, 110.00, 110.00, // Am
-      87.31, 87.31, 87.31, 87.31, 87.31, 87.31, 87.31, 87.31           // F
-    ];
-
-    // 丰满车载电钢琴和弦伴奏
-    const chords = [
-      [261.63, 329.63, 392.00], // C major
-      [246.94, 293.66, 392.00], // G major
-      [220.00, 261.63, 329.63], // A minor
-      [174.61, 220.00, 261.63]  // F major
-    ];
-
-    this.bgmTimer = setInterval(() => {
-      if (!this.enabled || !this.ctx || !running) return;
-      if (this.ctx.state === "suspended") {
-        this.ctx.resume().catch(() => {});
-        return;
-      }
-
-      const now = this.ctx.currentTime + 0.01;
-      const idx = this.step % 32;
-
-      // 1. 动感底鼓 (Kick)
-      if (idx % 4 === 0) {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.frequency.setValueAtTime(145, now);
-        osc.frequency.exponentialRampToValueAtTime(38, now + 0.12);
-        gain.gain.setValueAtTime(0.45, now);
-        gain.gain.linearRampToValueAtTime(0.01, now + 0.13);
-        osc.connect(gain);
-        gain.connect(this.masterGain);
-        osc.start(now);
-        osc.stop(now + 0.14);
-      }
-
-      // 2. 清脆踩镲
-      if (idx % 2 === 1) {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(idx % 4 === 3 ? 3800 : 3200, now);
-        gain.gain.setValueAtTime(0.09, now);
-        gain.gain.linearRampToValueAtTime(0.001, now + 0.05);
-        osc.connect(gain);
-        gain.connect(this.masterGain);
-        osc.start(now);
-        osc.stop(now + 0.05);
-      }
-
-      // 3. 弹力电贝斯 (Bassline)
-      const bFreq = bass[idx];
-      if (bFreq && idx % 2 === 0) {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = "triangle";
-        osc.frequency.setValueAtTime(bFreq, now);
-        gain.gain.setValueAtTime(0.28, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
-        osc.connect(gain);
-        gain.connect(this.masterGain);
-        osc.start(now);
-        osc.stop(now + 0.19);
-      }
-
-      // 4. 温润车载和弦铺底
-      if (idx % 8 === 0 || idx % 8 === 4) {
-        const chordNotes = chords[Math.floor(idx / 8)];
-        chordNotes.forEach(freq => {
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = "sine";
-          osc.frequency.setValueAtTime(freq, now);
-          gain.gain.setValueAtTime(0.12, now);
-          gain.gain.exponentialRampToValueAtTime(0.005, now + 0.42);
-          osc.connect(gain);
-          gain.connect(this.masterGain);
-          osc.start(now);
-          osc.stop(now + 0.43);
-        });
-      }
-
-      // 5. 清爽主旋律 (Lead Melody)
-      const mFreq = melody[idx];
-      if (mFreq > 0) {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = "triangle";
-        osc.frequency.setValueAtTime(mFreq, now);
-        gain.gain.setValueAtTime(0.32, now);
-        gain.gain.exponentialRampToValueAtTime(0.005, now + 0.22);
-        osc.connect(gain);
-        gain.connect(this.masterGain);
-        osc.start(now);
-        osc.stop(now + 0.23);
-      }
-
-      this.step++;
-    }, 130);
+  stopBGM() {
+    if (this.bgmAudio) {
+      try {
+        this.bgmAudio.pause();
+      } catch (e) {}
+    }
   }
 
   playCrash() {
+    if (!this.enabled) return;
     this.ensureContext();
-    if (!this.ctx || !this.enabled) return;
-    const now = this.ctx.currentTime + 0.01;
-
-    // 低频巨响冲击轰鸣
-    const boomOsc = this.ctx.createOscillator();
-    const boomGain = this.ctx.createGain();
-    boomOsc.type = "sine";
-    boomOsc.frequency.setValueAtTime(175, now);
-    boomOsc.frequency.exponentialRampToValueAtTime(22, now + 0.8);
-    boomGain.gain.setValueAtTime(1.0, now);
-    boomGain.gain.exponentialRampToValueAtTime(0.01, now + 0.85);
-    boomOsc.connect(boomGain);
-    boomGain.connect(this.masterGain);
-    boomOsc.start(now);
-    boomOsc.stop(now + 0.85);
-
-    // 金属撞击与碎裂声
-    const crunchOsc = this.ctx.createOscillator();
-    const crunchGain = this.ctx.createGain();
-    crunchOsc.type = "sawtooth";
-    crunchOsc.frequency.setValueAtTime(380, now);
-    crunchOsc.frequency.linearRampToValueAtTime(55, now + 0.5);
-    crunchGain.gain.setValueAtTime(0.75, now);
-    crunchGain.gain.exponentialRampToValueAtTime(0.01, now + 0.55);
-    crunchOsc.connect(crunchGain);
-    crunchGain.connect(this.masterGain);
-    crunchOsc.start(now);
-    crunchOsc.stop(now + 0.55);
+    if (this.crashAudio) {
+      try {
+        this.crashAudio.currentTime = 0;
+        this.crashAudio.play().catch(() => {});
+      } catch (e) {}
+    }
   }
 
   playCoin() {
+    if (!this.enabled) return;
     this.ensureContext();
-    if (!this.ctx || !this.enabled) return;
-    const now = this.ctx.currentTime + 0.01;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(1046.5, now);
-    osc.frequency.setValueAtTime(1567.98, now + 0.08);
-    gain.gain.setValueAtTime(0.35, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.28);
+    if (this.coinAudio) {
+      try {
+        this.coinAudio.currentTime = 0;
+        this.coinAudio.play().catch(() => {});
+      } catch (e) {}
+    }
   }
 
   playBoost() {
+    if (!this.enabled) return;
     this.ensureContext();
-    if (!this.ctx || !this.enabled) return;
-    const now = this.ctx.currentTime + 0.01;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(220, now);
-    osc.frequency.exponentialRampToValueAtTime(680, now + 0.35);
-    gain.gain.setValueAtTime(0.32, now);
-    gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.4);
+    if (this.ctx) {
+      try {
+        const now = this.ctx.currentTime + 0.01;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(680, now + 0.35);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.4);
+      } catch (e) {}
+    }
   }
 
   toggle() {
     this.enabled = !this.enabled;
-    if (this.masterGain) {
-      this.masterGain.gain.setValueAtTime(this.enabled ? 0.85 : 0, this.ctx.currentTime);
+    if (this.bgmAudio) {
+      if (this.enabled && running) {
+        this.bgmAudio.play().catch(() => {});
+      } else {
+        this.bgmAudio.pause();
+      }
+    }
+    if (this.engineGain && this.ctx) {
+      this.engineGain.gain.setValueAtTime(this.enabled ? 0.08 : 0, this.ctx.currentTime);
     }
     return this.enabled;
   }
@@ -313,11 +218,18 @@ class MusicEngine {
 
 const sound = new MusicEngine();
 
-// 手机强力马达震动
-function triggerHaptic(pattern) {
+// 手机强力马达震动 (兼容全平台手机)
+function triggerHaptic(durationOrPattern = 200) {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
     try {
-      navigator.vibrate(pattern);
+      if (Array.isArray(durationOrPattern)) {
+        const success = navigator.vibrate(durationOrPattern);
+        if (!success && durationOrPattern.length > 0) {
+          navigator.vibrate(durationOrPattern[0]);
+        }
+      } else {
+        navigator.vibrate(durationOrPattern);
+      }
     } catch (e) {}
   }
 }
@@ -995,12 +907,8 @@ function startGame() {
   localStorage.setItem("neonRacerName", playerName);
   resetGame();
 
-  if (sound.ctx && sound.ctx.state === "suspended") {
-    sound.ctx.resume().then(() => sound.startBGM()).catch(() => {});
-  } else {
-    sound.startBGM();
-  }
-  triggerHaptic([40, 30, 50]);
+  sound.startBGM();
+  triggerHaptic(40);
 }
 
 async function endGame() {
@@ -1296,16 +1204,14 @@ async function loadLeaderboard() {
 }
 
 // ═══════════════════════════════════════
-// 全局交互与事件绑定 (确保任何点击手势必定唤醒音乐与震动)
+// 全局交互与事件绑定 (确保苹果 iOS Safari 及全平台 100% 唤醒音频)
 // ═══════════════════════════════════════
 function unlockAudioAndHaptics() {
   sound.ensureContext();
-  if (sound.ctx && sound.ctx.state === "suspended") {
-    sound.ctx.resume().then(() => {
-      if (running && sound.enabled && !sound.bgmTimer) sound.startBGM();
-    }).catch(() => {});
-  } else if (running && sound.enabled && !sound.bgmTimer) {
-    sound.startBGM();
+  if (running && sound.enabled) {
+    if (sound.bgmAudio && sound.bgmAudio.paused) {
+      sound.startBGM();
+    }
   }
 }
 
@@ -1315,12 +1221,18 @@ window.addEventListener("click", unlockAudioAndHaptics, { passive: true });
 
 function bindButton(selector, key) {
   const element = document.querySelector(selector);
+  if (!element) return;
   element.addEventListener("pointerdown", event => {
     event.preventDefault();
     unlockAudioAndHaptics();
+    triggerHaptic(30);
     keys[key] = true;
   });
-  ["pointerup", "pointercancel", "pointerleave"].forEach(name => {
+  element.addEventListener("touchstart", () => {
+    unlockAudioAndHaptics();
+    triggerHaptic(30);
+  }, { passive: true });
+  ["pointerup", "pointercancel", "pointerleave", "touchend"].forEach(name => {
     element.addEventListener(name, () => { keys[key] = false; });
   });
 }
@@ -1370,10 +1282,19 @@ bindButton("#left", "left");
 bindButton("#right", "right");
 bindButton("#boost", "boost");
 
-document.querySelector("#start").addEventListener("click", (e) => {
+// 开始按钮绑定：同时支持 touchend 与 click (针对苹果 Safari 零延迟手势)
+const startBtn = document.querySelector("#start");
+let startTapped = false;
+function onStartTap(e) {
+  if (startTapped) return;
+  startTapped = true;
+  setTimeout(() => { startTapped = false; }, 350);
+
   unlockAudioAndHaptics();
   startGame();
-});
+}
+startBtn.addEventListener("touchend", onStartTap);
+startBtn.addEventListener("click", onStartTap);
 
 refreshRanks.addEventListener("click", loadLeaderboard);
 
