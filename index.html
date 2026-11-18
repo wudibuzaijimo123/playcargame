@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <!-- 3D WebGL Canvas 容器 -->
@@ -21,8 +21,9 @@
       <div class="brand" id="brandTitle">COUNTRY ROAD</div>
     </div>
     
-    <!-- 顶栏快速切场景按钮 -->
+    <!-- 顶栏快速切场景按钮与音效开关 -->
     <div class="topbar-actions">
+      <button id="audioToggle" class="icon-btn" title="音乐音效开关" type="button">🔊</button>
       <div class="quick-scene-select">
         <select id="quickSceneSelect" aria-label="切换场景">
           <option value="country">🌾 乡间小路</option>
@@ -113,6 +114,6 @@
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=7"></script>
+  <script src="game.js?v=8"></script>
 </body>
 </html>
