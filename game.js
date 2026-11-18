@@ -364,9 +364,30 @@ async function syncRaceRoom() {
     raceSync.remoteId = other.id;
     updateRemoteCar(other);
   } catch (error) {
-    document.querySelector("#roomStatus").textContent = "联机断开，请重新加入房间";
-    setRoomBadge(roomCode, true);
+    // 断线不让人干等：自动重连同一个房间号
+    document.querySelector("#roomStatus").textContent = "连接中断，正在自动重连…";
+    setRoomBadge(roomCode, true, "重连中…");
+    scheduleReconnect();
   }
+}
+
+// 断线自动重连（保留原房间号）
+let reconnectTimer = null;
+function scheduleReconnect() {
+  if (reconnectTimer || !roomCode) return;
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    const code = roomCode;
+    if (!code) return;
+    try {
+      await leaveRaceRoom(true);
+      await enterRaceRoom(code);
+      const status = document.querySelector("#roomStatus");
+      if (status) status.textContent = `已重新连上房间 ${code}`;
+    } catch (error) {
+      /* 下一轮失败还会再排一次 */
+    }
+  }, 1200);
 }
 
 // 对手状态只做采样记录，真正的绘制放到每一帧里按外推计算，保证相对运动连续
@@ -486,7 +507,12 @@ function startRaceStream() {
       const other = (data.players || [])[0];
       if (other) updateRemoteCar(other);
     };
-    raceStream.onerror = () => { /* 断线时轮询仍然在跑，自动兜底 */ };
+    raceStream.onerror = () => {
+      // SSE 断了就关掉，交给轮询 + 自动重连兜底
+      try { raceStream.close(); } catch (error) { /* ignore */ }
+      raceStream = null;
+      scheduleReconnect();
+    };
   } catch (error) {
     raceStream = null;
   }
