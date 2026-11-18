@@ -535,8 +535,8 @@ p {
   z-index: 10;
   justify-content: center;
   align-items: flex-end;
-  gap: 22px;
-  padding: 24px 20px 20px;
+  gap: clamp(28px, 8vw, 72px);
+  padding: 24px 28px 20px;
   background: linear-gradient(to top, rgba(5, 6, 20, 0.7) 0%, rgba(5, 6, 20, 0.2) 60%, transparent 100%);
 }
 
@@ -623,7 +623,9 @@ p {
 
   .controls {
     padding-bottom: 18px;
-    gap: 20px;
+    gap: clamp(34px, 11vw, 76px);
+    padding-left: 30px;
+    padding-right: 30px;
   }
 
   .controls button { width: 66px; height: 66px; font-size: 22px; }
@@ -637,4 +639,10 @@ p {
 
 @media (pointer: coarse) {
   .controls { display: flex; }
+}
+
+@media (max-width: 420px) {
+  .topbar-actions { gap: 6px; }
+  .tilt-btn { font-size: 13px; }
+  .controls { gap: clamp(30px, 9vw, 42px); }
 }
