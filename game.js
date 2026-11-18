@@ -60,14 +60,35 @@ bestEl.textContent = best;
 let currentTheme = localStorage.getItem("racerSceneTheme") || "country";
 
 // ── API 接口 ──
+// 前端既可能在阿里云服务器上（与 /api 同源），也可能托管在 GitHub Pages 上（需跨域打 API 域名）。
+// 先试同源，失败自动回退到独立 API 域名，两边部署都不用改代码。
+const API_FALLBACK = "https://api.game.yhj123.dpdns.org";
+let apiBase = null;
+
+async function resolveApiBase() {
+  if (apiBase !== null) return apiBase;
+  for (const base of ["", API_FALLBACK]) {
+    try {
+      const res = await fetch(`${base}/api/health`, { cache: "no-store" });
+      if (res.ok) { apiBase = base; return base; }
+    } catch (error) {
+      // 试下一个
+    }
+  }
+  apiBase = API_FALLBACK;
+  return apiBase;
+}
+
 const api = {
   async get(path) {
-    const res = await fetch(path);
+    const base = await resolveApiBase();
+    const res = await fetch(`${base}${path}`);
     if (!res.ok) throw new Error(`GET ${path} failed`);
     return res.json();
   },
   async post(path, body) {
-    const res = await fetch(path, {
+    const base = await resolveApiBase();
+    const res = await fetch(`${base}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20">
+  <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
   <!-- 3D WebGL Canvas 容器 -->
@@ -21,14 +21,14 @@
       <div class="brand" id="brandTitle">COUNTRY ROAD</div>
     </div>
     
-    <!-- 顶栏快速切场景按钮与音效开关 -->
+    <!-- 顶栏快速切场景按钮与音效开�?-->
     <div class="topbar-actions">
       <button id="tiltToggle" class="icon-btn tilt-btn" title="开启手机倾斜转向" type="button">📱</button>
-      <button id="audioToggle" class="icon-btn" title="音乐音效开关" type="button">🔊</button>
+      <button id="audioToggle" class="icon-btn" title="音乐音效开�? type="button">🔊</button>
       <div class="quick-scene-select">
         <select id="quickSceneSelect" aria-label="切换场景">
           <option value="country">🌾 乡间小路</option>
-          <option value="island">🏝️ 逃离荒岛</option>
+          <option value="island">🏝�?逃离荒岛</option>
           <option value="jungle">🌴 丛林狂飙</option>
           <option value="river">🌊 沿河峡谷</option>
         </select>
@@ -51,31 +51,31 @@
     </div>
     <div class="metric">
       <strong id="best">0</strong>
-      <span>最高纪录</span>
+      <span>最高纪�?/span>
     </div>
     <div class="race-progress"><div id="raceProgressBar"></div><span id="raceProgressText">0 / 1500 m</span></div>
   </section>
 
-  <aside class="leaderboard" aria-label="排行榜">
+  <aside class="leaderboard" aria-label="排行�?>
     <div class="panel-title">
-      <span>🏆 车王排行榜</span>
-      <button id="refreshRanks" title="刷新排行榜">刷新</button>
+      <span>🏆 车王排行�?/span>
+      <button id="refreshRanks" title="刷新排行�?>刷新</button>
     </div>
     <ol id="leaderboardList">
-      <li>正在读取排行榜...</li>
+      <li>正在读取排行�?..</li>
     </ol>
   </aside>
 
-  <div class="nitro" aria-label="氮气槽">
+  <div class="nitro" aria-label="氮气�?>
     <div id="nitroBar"></div>
   </div>
 
   <div class="impact-hud" id="impactHud" aria-live="polite">
-    <span class="impact-icon">⚠</span>
+    <span class="impact-icon">�?/span>
     <span id="impactValue">小心碰撞</span>
   </div>
 
-  <div class="sound-status" id="soundStatus">🔊 音效已开启</div>
+  <div class="sound-status" id="soundStatus">🔊 音效已开�?/div>
 
   <div class="controls">
     <div class="steering-mode" role="group" aria-label="选择转向方式">
@@ -83,9 +83,9 @@
       <button class="mode-option" id="tiltMode" type="button">手机倾斜</button>
     </div>
     <div class="control-pad">
-      <button id="left" aria-label="向左转">&larr;</button>
-      <button class="boost" id="boost" aria-label="氮气加速">氮气</button>
-      <button id="right" aria-label="向右转">&rarr;</button>
+      <button id="left" aria-label="向左�?>&larr;</button>
+      <button class="boost" id="boost" aria-label="氮气加�?>氮气</button>
+      <button id="right" aria-label="向右�?>&rarr;</button>
     </div>
     <div class="pedal-controls">
       <button id="brake" type="button">刹车</button>
@@ -97,9 +97,9 @@
     <div class="menu">
       <div class="kicker">3D 真实公路自驾漫游</div>
       <h1 id="title">公路漫游 3D</h1>
-      <p id="message">开着特斯拉享受沿途的大自然风景！避开慢行车流，沿途看小牛、小鹿与农庄风车，伴着动感音乐出发！</p>
+      <p id="message">开着特斯拉享受沿途的大自然风景！避开慢行车流，沿途看小牛、小鹿与农庄风车，伴着动感音乐出发�?/p>
 
-      <!-- 场景选择器 -->
+      <!-- 场景选择�?-->
       <div class="theme-selector">
         <div class="theme-label">选择赛道主题地图</div>
         <div class="theme-chips">
@@ -108,7 +108,7 @@
             <span class="chip-name">乡间小路</span>
           </button>
           <button class="theme-chip" data-theme="island" type="button">
-            <span class="chip-icon">🏝️</span>
+            <span class="chip-icon">🏝�?/span>
             <span class="chip-name">逃离荒岛</span>
           </button>
           <button class="theme-chip" data-theme="jungle" type="button">
@@ -124,7 +124,7 @@
 
       <label class="name-field">
         <span>车手昵称</span>
-        <input id="playerName" maxlength="16" placeholder="输入你的车手名">
+        <input id="playerName" maxlength="16" placeholder="输入你的车手�?>
       </label>
       <div class="menu-steering" role="group" aria-label="选择方向控制方式">
         <div class="theme-label">选择方向控制方式</div>
@@ -142,19 +142,19 @@
         <div><input id="roomCodeInput" maxlength="6" placeholder="输入朋友的房间码"><button id="joinRoom" type="button">加入</button></div>
         <div id="roomStatus">单人比赛</div>
       </div>
-      <!-- 苹果 iOS Safari 提示与试听测试 -->
+      <!-- 苹果 iOS Safari 提示与试听测�?-->
       <div style="background:rgba(255,180,0,0.12);border:1px solid rgba(255,200,0,0.35);border-radius:10px;padding:8px 12px;margin:8px 0 12px;font-size:11px;color:#ffeaa7;line-height:1.5;text-align:left;">
-        🔔 <b>苹果 iPhone / Safari 用户提示：</b><br>
-        1. 听不到音乐请<b>拨动手机左侧【实体静音开关】关闭静音模式</b>（露出红点时苹果系统会强制静音所有网页音效），并按音量键调大声音。<br>
+        🔔 <b>苹果 iPhone / Safari 用户提示�?/b><br>
+        1. 听不到音乐请<b>拨动手机左侧【实体静音开关】关闭静音模�?/b>（露出红点时苹果系统会强制静音所有网页音效），并按音量键调大声音�?br>
         2. 苹果 iOS 系统原生不支持网页物理震动，发生碰撞时已为你呈现全屏剧烈红闪与镜头震动特效！
       </div>
 
       <button id="testAudioBtn" type="button" style="background:rgba(97,239,255,0.18);border:1px solid #61efff;color:#61efff;padding:10px 16px;border-radius:24px;font-size:13px;cursor:pointer;margin-bottom:12px;font-weight:700;width:100%;letter-spacing:1px;display:flex;align-items:center;justify-content:center;gap:6px;">
-        🎵 点击试听 / 开启公路自驾车载音乐
+        🎵 点击试听 / 开启公路自驾车载音�?
       </button>
 
       <button class="start" id="start">启动出发</button>
-      <div class="tips">A / ← 左转　D / → 右转　W / ↑ 加速　Space 氮气加速</div>
+      <div class="tips">A / �?左转　D / �?右转　W / �?加速　Space 氮气加�?/div>
     </div>
   </div>
 
@@ -163,8 +163,8 @@
   <audio id="crashAudio" src="assets/crash.wav" playsinline preload="auto"></audio>
   <audio id="coinAudio" src="assets/coin.wav" playsinline preload="auto"></audio>
 
-  <!-- 本地 Three.js 核心库 -->
+  <!-- 本地 Three.js 核心�?-->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=20"></script>
+  <script src="game.js?v=21"></script>
 </body>
 </html>

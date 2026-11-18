@@ -26,7 +26,7 @@ ensureDataFile();
 
 const server = http.createServer(async (request, response) => {
   try {
-    response.setHeader("Access-Control-Allow-Origin", "https://game.yhj123.dpdns.org");
+    response.setHeader("Access-Control-Allow-Origin", request.headers.origin || "*");
     response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     response.setHeader("Access-Control-Allow-Headers", "Content-Type");
     if (request.method === "OPTIONS") {
@@ -48,7 +48,7 @@ const server = http.createServer(async (request, response) => {
       const payload = JSON.parse(body || "{}");
       const entry = normalizeScore(payload);
       if (!entry) {
-        return sendJson(response, 400, { error: "请输入 1-16 位玩家名，并提交有效分数。" });
+        return sendJson(response, 400, { error: "请输�?1-16 位玩家名，并提交有效分数�? });
       }
       const scores = [entry, ...readScores()]
         .sort((left, right) => right.score - left.score)
@@ -66,11 +66,11 @@ const server = http.createServer(async (request, response) => {
         raceRooms.set(roomCode, { players: new Map(), updatedAt: Date.now() });
       }
       const room = raceRooms.get(roomCode);
-      if (!room) return sendJson(response, 404, { error: "房间不存在，请检查房间码。" });
+      if (!room) return sendJson(response, 404, { error: "房间不存在，请检查房间码�? });
       for (const [id, player] of room.players) {
         if (Date.now() - player.updatedAt > 5000) room.players.delete(id);
       }
-      if (room.players.size >= 2) return sendJson(response, 409, { error: "房间已满（最多两名车手）。" });
+      if (room.players.size >= 2) return sendJson(response, 409, { error: "房间已满（最多两名车手）�? });
       const playerId = Math.random().toString(36).slice(2, 12);
       room.players.set(playerId, { id: playerId, name, x: 0, heading: 0, speed: 0, distance: 0, updatedAt: Date.now() });
       room.updatedAt = Date.now();
@@ -80,7 +80,7 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname === "/api/race/state" && request.method === "POST") {
       const body = JSON.parse(await readBody(request) || "{}");
       const room = raceRooms.get(String(body.roomCode || "").toUpperCase());
-      if (!room || !room.players.has(body.playerId)) return sendJson(response, 404, { error: "联机房间已失效。" });
+      if (!room || !room.players.has(body.playerId)) return sendJson(response, 404, { error: "联机房间已失效�? });
       const player = room.players.get(body.playerId);
       for (const key of ["x", "heading", "speed", "distance"]) player[key] = Number.isFinite(Number(body[key])) ? Number(body[key]) : player[key];
       player.updatedAt = room.updatedAt = Date.now();
@@ -89,7 +89,7 @@ const server = http.createServer(async (request, response) => {
 
     if (url.pathname === "/api/race/state" && request.method === "GET") {
       const room = raceRooms.get(String(url.searchParams.get("roomCode") || "").toUpperCase());
-      if (!room) return sendJson(response, 404, { error: "联机房间已失效。" });
+      if (!room) return sendJson(response, 404, { error: "联机房间已失效�? });
       const playerId = url.searchParams.get("playerId");
       return sendJson(response, 200, { players: [...room.players.values()].filter(player => player.id !== playerId && Date.now() - player.updatedAt < 5000) });
     }
