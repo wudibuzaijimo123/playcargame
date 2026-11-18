@@ -830,11 +830,11 @@ const carPhysics = {
 // 严谨普通家用车物理参数 (特斯拉 Model 3 轴距 2.85m，高速变道平顺沉稳，零侧滑漂移)
 const PHYS = {
   wheelbase: 2.85,         // 特斯拉中型轿车轴距 (m)
-  maxSteerAngle: 0.16,     // 前轮适度真实转向打角 (~9.2度，清晰直观的前轮转向，非卡丁车急拐)
-  steerSpeed: 4.8,         // 方向盘打舵速率
+  maxSteerAngle: 0.33,     // 加大转向范围，手机倾斜时能更快完成变道
+  steerSpeed: 8.0,         // 提高方向盘响应速度
   steerReturn: 6.8,        // 方向盘自动回正速率
-  maxHeading: 0.085,       // 高速公路平稳变道最大车身偏航角 (~4.9度，绝不甩尾漂移)
-  headingAlignRate: 5.2,   // 循迹自动对齐车道回正力矩
+  maxHeading: 0.35,        // 增大变道幅度，避免来不及避开车流
+  headingAlignRate: 3.8,   // 减缓自动回正，让车辆保留变道趋势
   suspensionOmega: 7.5,
   suspensionZeta: 0.98,
   maxRollAngle: 0.02       // 真实轿车极小微弱侧倾 (~1.1度)
@@ -1110,7 +1110,7 @@ function resetGame() {
   nitroBar.style.width = "100%";
 
   // 开局立即在前方车道生成 6 辆巡航车流，绝不让道路空旷！
-  const initialZ = [-28, -55, -85, -120, -160, -205];
+  const initialZ = [-100, -155, -210, -270, -330, -390];
   initialZ.forEach((z, idx) => {
     const laneIndex = idx % LANE_COUNT;
     const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
@@ -1187,9 +1187,10 @@ function update() {
   boosting = wantsBoost;
   nitro = boosting ? Math.max(0, nitro - 0.7) : Math.min(100, nitro + 0.12);
 
-  const targetSpeed = accelerating ? 1.12 : 0.72;
+  // 手机与电脑默认同速；键盘油门只略微提速，避免平台间速度差异过大。
+  const targetSpeed = accelerating ? 1.12 : 1.0;
   baseSpeed += (targetSpeed - baseSpeed) * 0.05;
-  currentSpeed = baseSpeed + (boosting ? 0.38 : 0);
+  currentSpeed = baseSpeed + (boosting ? 0.35 : 0);
 
   score += currentSpeed * 0.45;
   nitroBar.style.width = `${nitro}%`;
@@ -1218,7 +1219,7 @@ function update() {
   // 阿克曼汽车动力学：前轮打角带动整车绕【后轴中心】偏转
   // d(heading)/dt = (v / L) * tan(steerAngle)
   const angularVelocity = (currentSpeed / PHYS.wheelbase) * Math.tan(carPhysics.steerAngle) * 0.8;
-  carPhysics.heading += angularVelocity * dt * 2.2;
+  carPhysics.heading += angularVelocity * dt * 5.0;
 
   // 松开按键时，车身平滑自动回正平行于车道
   if (targetSteer === 0) {
@@ -1306,7 +1307,7 @@ function update() {
   });
 
   // 5. 敌车刷新与真实碰撞检测 (高频刷新车流，丰富自驾驾驶感)
-  if (frame % Math.max(35, Math.floor(65 - currentSpeed * 10)) === 0) {
+  if (frame % Math.max(80, Math.floor(125 - currentSpeed * 10)) === 0) {
     spawnTraffic();
   }
   if (Math.random() < 0.03) {
@@ -1480,12 +1481,12 @@ function handleDeviceTilt(event) {
   if (tiltCenter === null) tiltCenter = gravityX;
   const lean = gravityX - tiltCenter;
   // 重力在横向的分量约 3.5 m/s² 时达到满舵；过滤传感器轻微抖动。
-  const normalized = Math.max(-1, Math.min(1, lean / 3.5));
-  const deadZone = 0.08;
+  const normalized = Math.max(-1, Math.min(1, lean / 2.2));
+  const deadZone = 0.04;
   const target = Math.abs(normalized) < deadZone
     ? 0
     : Math.sign(normalized) * (Math.abs(normalized) - deadZone) / (1 - deadZone);
-  tiltSteer += (target - tiltSteer) * 0.22;
+  tiltSteer += (target - tiltSteer) * 0.42;
 }
 
 async function toggleTiltSteering() {
