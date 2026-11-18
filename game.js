@@ -66,7 +66,7 @@ function resize() {
   roadLeft = Math.max(25, width * .18);
   roadRight = width - roadLeft;
   laneWidth = (roadRight - roadLeft) / 4;
-  car.y = height - 145;
+  car.y = height - 180;
   if (!running) car.x = width / 2 - car.width / 2;
   stars = Array.from({ length: 90 }, () => ({
     x: Math.random() * width,

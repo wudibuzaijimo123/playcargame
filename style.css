@@ -13,7 +13,6 @@ html, body {
   user-select: none;
 }
 
-/* ── Subtle grid overlay ── */
 body::before {
   content: "";
   position: fixed;
@@ -27,7 +26,6 @@ body::before {
   z-index: 0;
 }
 
-/* ── Canvas ── */
 canvas {
   display: block;
   width: 100%;
@@ -49,7 +47,7 @@ canvas {
   align-items: flex-start;
   justify-content: space-between;
   padding: 16px 20px;
-  background: linear-gradient(to bottom, rgba(5, 6, 16, 0.75) 0%, transparent 100%);
+  background: linear-gradient(to bottom, rgba(5, 6, 16, 0.8) 0%, rgba(5, 6, 16, 0.3) 70%, transparent 100%);
 }
 
 .eyebrow {
@@ -111,18 +109,18 @@ canvas {
 }
 
 @keyframes dot-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 10px #48ffb3; }
-  50% { opacity: 0.5; box-shadow: 0 0 4px #48ffb3; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 /* ═══════════════════════════════════════
-   HUD — 速度 / 分数 / 最佳
+   HUD — 速度 / 分数 / 最佳 (Desktop: Left side)
    ═══════════════════════════════════════ */
 .hud {
   position: fixed;
   left: 20px;
   top: 100px;
-  z-index: 3;
+  z-index: 4;
   pointer-events: none;
   display: grid;
   gap: 10px;
@@ -139,7 +137,6 @@ canvas {
     0 8px 28px rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  transition: border-color 0.4s ease;
 }
 
 .metric strong {
@@ -246,7 +243,7 @@ li span {
   position: fixed;
   left: 20px;
   bottom: 24px;
-  z-index: 3;
+  z-index: 4;
   width: min(320px, 46vw);
   height: 12px;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -424,279 +421,249 @@ p {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 16px;
+  bottom: 0;
   z-index: 4;
   justify-content: center;
-  align-items: center;
-  gap: 14px;
-  padding: 0 20px;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 0 20px 18px;
+  /* 底部渐变遮罩，像仪表盘 */
+  background: linear-gradient(to top, rgba(5, 6, 16, 0.65) 0%, rgba(5, 6, 16, 0.3) 60%, transparent 100%);
+  padding-top: 30px;
 }
 
 .controls button {
-  width: 64px;
-  height: 64px;
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
-  border: 1.5px solid rgba(98, 239, 255, 0.35);
-  background: rgba(10, 14, 36, 0.8);
+  border: 1.5px solid rgba(98, 239, 255, 0.3);
+  background: rgba(10, 14, 36, 0.75);
   color: #c0f4ff;
   font-size: 22px;
   font-weight: 700;
   box-shadow:
-    0 0 18px rgba(72, 232, 255, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 0 16px rgba(72, 232, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
   touch-action: none;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  transition: all 0.15s ease;
+  transition: all 0.12s ease;
   position: relative;
-  overflow: hidden;
-}
-
-.controls button::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(98, 239, 255, 0.15) 0%, transparent 70%);
-  opacity: 0;
-  transition: opacity 0.2s;
 }
 
 .controls button:active {
-  transform: scale(0.9);
+  transform: scale(0.88);
   border-color: rgba(98, 239, 255, 0.7);
+  background: rgba(98, 239, 255, 0.12);
   box-shadow:
-    0 0 24px rgba(98, 239, 255, 0.3),
-    inset 0 0 12px rgba(98, 239, 255, 0.1);
-}
-
-.controls button:active::after {
-  opacity: 1;
+    0 0 24px rgba(98, 239, 255, 0.35),
+    inset 0 0 10px rgba(98, 239, 255, 0.08);
 }
 
 .controls .boost {
-  width: 74px;
-  height: 74px;
+  width: 72px;
+  height: 72px;
   font-size: 11px;
   font-weight: 900;
   font-family: 'Orbitron', sans-serif;
   letter-spacing: 1px;
   color: #fff;
-  border-color: rgba(182, 92, 255, 0.4);
-  background: linear-gradient(145deg, rgba(23, 108, 134, 0.75), rgba(116, 43, 142, 0.75));
+  border-color: rgba(182, 92, 255, 0.35);
+  background: linear-gradient(145deg, rgba(23, 108, 134, 0.7), rgba(116, 43, 142, 0.7));
   box-shadow:
-    0 0 22px rgba(160, 92, 255, 0.15),
+    0 0 20px rgba(160, 92, 255, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   animation: boost-breathe 2.5s ease-in-out infinite;
 }
 
 @keyframes boost-breathe {
-  0%, 100% {
-    box-shadow: 0 0 18px rgba(160, 92, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  }
-  50% {
-    box-shadow: 0 0 28px rgba(160, 92, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  }
+  0%, 100% { box-shadow: 0 0 16px rgba(160, 92, 255, 0.1); }
+  50% { box-shadow: 0 0 26px rgba(160, 92, 255, 0.25); }
 }
 
 .controls .boost:active {
   border-color: rgba(182, 92, 255, 0.8);
-  box-shadow:
-    0 0 32px rgba(182, 92, 255, 0.4),
-    inset 0 0 16px rgba(182, 92, 255, 0.15);
-  transform: scale(0.92);
+  background: linear-gradient(145deg, rgba(30, 140, 170, 0.8), rgba(150, 55, 180, 0.8));
+  box-shadow: 0 0 32px rgba(182, 92, 255, 0.4);
+  transform: scale(0.9);
 }
 
 /* ═══════════════════════════════════════
-   MOBILE RESPONSIVE (<= 850px)
+   MOBILE  (<= 850px)
+   HUD 移到顶部，不再挡住赛车
    ═══════════════════════════════════════ */
 @media (max-width: 850px) {
   .leaderboard { display: none; }
-
-  .topbar {
-    padding: 12px 16px;
-  }
-
   .server { display: none; }
 
-  .eyebrow { font-size: 9px; }
+  .topbar {
+    padding: 10px 14px 6px;
+  }
 
-  .brand { font-size: clamp(20px, 5vw, 32px); }
+  .eyebrow { font-size: 8px; letter-spacing: 0.18em; }
+  .brand { font-size: clamp(18px, 4.5vw, 28px); margin-top: 1px; }
 
+  /* ── HUD 移到顶部，紧贴标题下方，横向一排 ── */
   .hud {
+    position: fixed;
     top: auto;
-    bottom: 100px;
+    /* 用 CSS 计算放到 topbar 下面 */
+    top: 52px;
+    bottom: auto;
     left: 14px;
     right: 14px;
     width: auto;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
-
-  .metric {
-    padding: 10px 10px;
-    border-radius: 10px;
-    text-align: center;
-    border-color: rgba(98, 239, 255, 0.12);
-  }
-
-  .metric strong {
-    font-size: 22px;
-  }
-
-  .metric span {
-    font-size: 9px;
-    margin-top: 3px;
-  }
-
-  .nitro {
-    left: 14px;
-    right: 14px;
-    bottom: 86px;
-    width: auto;
-    height: 8px;
-    border-radius: 4px;
-  }
-
-  .nitro div {
-    border-radius: 4px;
-  }
-
-  .controls {
-    bottom: 14px;
-    gap: 16px;
-  }
-
-  .controls button {
-    width: 60px;
-    height: 60px;
-    font-size: 20px;
-  }
-
-  .controls .boost {
-    width: 70px;
-    height: 70px;
-    font-size: 10px;
-  }
-
-  .menu {
-    padding: 28px 22px;
-    border-radius: 14px;
-  }
-
-  h1 {
-    font-size: clamp(36px, 10vw, 56px);
-  }
-
-  .start {
-    padding: 13px 30px;
-    font-size: 15px;
-    border-radius: 10px;
-  }
-
-  .tips {
-    font-size: 10px;
-  }
-}
-
-/* ═══════════════════════════════════════
-   SMALL PHONES (< 400px)
-   ═══════════════════════════════════════ */
-@media (max-width: 400px) {
-  .hud {
-    bottom: 92px;
-    left: 10px;
-    right: 10px;
     gap: 6px;
   }
 
   .metric {
-    padding: 8px 6px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    text-align: center;
+    background: rgba(10, 14, 38, 0.7);
+    border-color: rgba(98, 239, 255, 0.1);
+    box-shadow: none;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
 
   .metric strong {
     font-size: 18px;
+    text-shadow: 0 0 10px rgba(103, 246, 255, 0.4);
   }
 
   .metric span {
     font-size: 8px;
+    margin-top: 2px;
+    letter-spacing: 0.1em;
   }
 
+  /* ── 氮气条在控制按钮正上方 ── */
   .nitro {
-    left: 10px;
-    right: 10px;
-    bottom: 80px;
+    left: 60px;
+    right: 60px;
+    bottom: 90px;
+    width: auto;
     height: 6px;
+    border-radius: 3px;
   }
 
+  .nitro div { border-radius: 3px; }
+
+  /* ── 控制按钮居中底部 ── */
   .controls {
-    bottom: 10px;
-    gap: 12px;
+    padding-bottom: 16px;
+    gap: 18px;
   }
 
   .controls button {
-    width: 54px;
-    height: 54px;
-    font-size: 18px;
+    width: 58px;
+    height: 58px;
+    font-size: 20px;
   }
 
   .controls .boost {
-    width: 64px;
-    height: 64px;
-    font-size: 9px;
+    width: 68px;
+    height: 68px;
+    font-size: 10px;
   }
 
-  .topbar {
-    padding: 10px 12px;
+  /* ── 菜单适配 ── */
+  .menu {
+    padding: 26px 20px;
+    border-radius: 14px;
   }
+
+  h1 { font-size: clamp(34px, 10vw, 52px); }
+
+  .start {
+    padding: 12px 28px;
+    font-size: 15px;
+    border-radius: 10px;
+  }
+
+  .tips { font-size: 10px; }
 }
 
 /* ═══════════════════════════════════════
-   TOUCH DEVICES – Show controls
+   小屏手机 (< 400px)
+   ═══════════════════════════════════════ */
+@media (max-width: 400px) {
+  .topbar { padding: 8px 10px 4px; }
+  .eyebrow { font-size: 7px; }
+  .brand { font-size: 16px; }
+
+  .hud {
+    top: 44px;
+    left: 10px;
+    right: 10px;
+    gap: 4px;
+  }
+
+  .metric { padding: 5px 6px; }
+  .metric strong { font-size: 16px; }
+  .metric span { font-size: 7px; }
+
+  .nitro {
+    left: 50px;
+    right: 50px;
+    bottom: 82px;
+    height: 5px;
+  }
+
+  .controls {
+    padding-bottom: 12px;
+    gap: 14px;
+  }
+
+  .controls button { width: 52px; height: 52px; font-size: 18px; }
+  .controls .boost { width: 62px; height: 62px; font-size: 9px; }
+}
+
+/* ═══════════════════════════════════════
+   触屏设备显示控制按钮
    ═══════════════════════════════════════ */
 @media (pointer: coarse) {
   .controls { display: flex; }
 }
 
 /* ═══════════════════════════════════════
-   LANDSCAPE PHONE
+   横屏手机
    ═══════════════════════════════════════ */
 @media (max-height: 500px) and (pointer: coarse) {
   .topbar { display: none; }
 
   .hud {
-    top: 10px;
-    bottom: auto;
-    left: 10px;
+    top: 8px;
+    left: 8px;
     right: auto;
     width: auto;
     grid-template-columns: repeat(3, auto);
-    gap: 6px;
+    gap: 4px;
   }
 
-  .metric {
-    padding: 6px 10px;
-  }
-
-  .metric strong { font-size: 16px; }
-  .metric span { font-size: 8px; margin-top: 1px; }
+  .metric { padding: 4px 8px; }
+  .metric strong { font-size: 14px; }
+  .metric span { font-size: 7px; margin-top: 1px; }
 
   .nitro {
-    top: 10px;
+    top: 8px;
     bottom: auto;
-    right: 10px;
+    right: 8px;
     left: auto;
-    width: 120px;
-    height: 6px;
+    width: 100px;
+    height: 5px;
   }
 
   .controls {
-    bottom: 10px;
-    right: 10px;
+    right: 8px;
     left: auto;
     width: auto;
+    padding-bottom: 8px;
+    background: none;
   }
 
-  .controls button { width: 48px; height: 48px; font-size: 16px; }
-  .controls .boost { width: 56px; height: 56px; font-size: 9px; }
+  .controls button { width: 46px; height: 46px; font-size: 16px; }
+  .controls .boost { width: 54px; height: 54px; font-size: 8px; }
 }
