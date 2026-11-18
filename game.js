@@ -43,6 +43,10 @@ let frame = 0;
 let raceDistance = 0;
 let finishDistance = 1500;
 let throttleHeld = false;
+let lastTrafficAt = 0;      // 上次刷车时间（毫秒），按真实时间刷车，不受帧率影响
+let currentFps = 60;        // 实时帧率，用来动态限制车流
+let fpsFrames = 0;
+let fpsWindowStart = 0;
 let brakeHeld = false;
 let roomCode = "";
 let roomPlayerId = "";
@@ -1424,10 +1428,14 @@ const traffic = [];
 const trafficColors = [0x111111, 0x0055ff, 0xcc2222, 0x888888, 0x1e3a5f];
 
 function spawnTraffic() {
-  if (traffic.length > (isMobileDevice ? 24 : 40)) return;   // 手机更保守，避免卡死
+  // 车流上限：电脑 48；手机按实时帧率自适应（掉帧就少刷，防止卡死）
+  const fpsLimit = isMobileDevice
+    ? (currentFps < 26 ? 16 : currentFps < 40 ? 24 : 32)
+    : 48;
+  if (traffic.length > fpsLimit) return;
 
   // 一定概率一次刷出并排的车，只留一条缝，逼玩家变道
-  const blockCount = Math.random() < 0.30 ? 2 : (Math.random() < 0.08 ? 3 : 1);
+  const blockCount = Math.random() < 0.36 ? 2 : (Math.random() < 0.12 ? 3 : 1);
   const freeLanes = Math.max(1, LANE_COUNT - blockCount);
   const startLane = Math.floor(Math.random() * freeLanes);
 
@@ -1705,11 +1713,12 @@ function resetGame() {
   raceTime = 0;
   maxSpeed = 0;
   finishSpeed = 0;
+  lastTrafficAt = 0;
   scoreEl.textContent = formatRaceTime(0);
   nitroBar.style.width = "100%";
 
   // 开局立即在前方车道生成 6 辆巡航车流，绝不让道路空旷！
-  const initialZ = [-80, -130, -180, -240, -300, -370, -440, -510];
+  const initialZ = [-60, -95, -130, -170, -210, -255, -300, -350, -400, -455, -510, -570];
   initialZ.forEach((z, idx) => {
     const laneIndex = idx % LANE_COUNT;
     const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
@@ -1997,6 +2006,16 @@ function update() {
   score += currentSpeed * 0.45;
   raceTime += 1 / 60;
   maxSpeed = Math.max(maxSpeed, currentSpeed * 90);
+
+  // 统计真实帧率（1 秒一个窗口）
+  fpsFrames++;
+  const fpsNow = performance.now();
+  if (!fpsWindowStart) fpsWindowStart = fpsNow;
+  if (fpsNow - fpsWindowStart >= 1000) {
+    currentFps = Math.round((fpsFrames * 1000) / (fpsNow - fpsWindowStart));
+    fpsFrames = 0;
+    fpsWindowStart = fpsNow;
+  }
   nitroBar.style.width = `${nitro}%`;
   scoreEl.textContent = formatRaceTime(raceTime);
   speedEl.textContent = Math.floor(currentSpeed * 90);
@@ -2119,7 +2138,11 @@ function update() {
   });
 
   // 5. 敌车刷新与真实碰撞检测 (高频刷新车流，丰富自驾驾驶感)
-  if (frame % Math.max(52, Math.floor(96 - currentSpeed * 12)) === 0) {
+  // 按真实时间刷车（不受帧率影响）：静止 1.45 秒一辆，满速约 0.62 秒一辆
+  const nowMs = Date.now();
+  const trafficInterval = Math.max(620, 1450 - currentSpeed * 340);
+  if (nowMs - lastTrafficAt > trafficInterval) {
+    lastTrafficAt = nowMs;
     spawnTraffic();
   }
   if (Math.random() < 0.03) {
