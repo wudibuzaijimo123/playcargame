@@ -56,7 +56,7 @@ const api = {
 };
 
 // ═══════════════════════════════════════
-// 100% 稳定运行的真实公路自驾车载音乐系统
+// 100% 稳定运行的真实公路自驾车载音乐与声效系统
 // ═══════════════════════════════════════
 class MusicEngine {
   constructor() {
@@ -76,39 +76,51 @@ class MusicEngine {
       if (!AudioCtx) return;
       this.ctx = new AudioCtx();
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(0.55, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
       this.setupEngineSound();
     }
-    if (this.ctx.state === "suspended") {
+    if (this.ctx && this.ctx.state === "suspended") {
       this.ctx.resume().catch(() => {});
     }
   }
 
   setupEngineSound() {
     if (!this.ctx) return;
-    // 电动车轻盈科技蜂鸣与轮胎胎噪
-    this.engineOsc = this.ctx.createOscillator();
-    this.engineOsc.type = "sine";
-    this.engineOsc.frequency.setValueAtTime(90, this.ctx.currentTime);
+    try {
+      // 电动车轻盈科技蜂鸣与轮胎胎噪
+      this.engineOsc = this.ctx.createOscillator();
+      this.engineOsc.type = "sine";
+      this.engineOsc.frequency.setValueAtTime(95, this.ctx.currentTime);
 
-    this.engineGain = this.ctx.createGain();
-    this.engineGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+      this.engineGain = this.ctx.createGain();
+      this.engineGain.gain.setValueAtTime(0.09, this.ctx.currentTime);
 
-    this.engineOsc.connect(this.engineGain);
-    this.engineGain.connect(this.masterGain);
-    this.engineOsc.start();
+      this.engineOsc.connect(this.engineGain);
+      this.engineGain.connect(this.masterGain);
+      this.engineOsc.start();
+    } catch (e) {}
   }
 
   updateEngine(speed, isBoosting) {
     if (!this.ctx || !this.engineOsc || !this.enabled) return;
-    // 电动车加速声音从 100Hz 平滑拉升到 280Hz
-    const targetFreq = 95 + speed * 90 + (isBoosting ? 80 : 0);
-    this.engineOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
+    try {
+      // 电动车加速声音从 100Hz 平滑拉升到 280Hz
+      const targetFreq = 95 + speed * 95 + (isBoosting ? 85 : 0);
+      this.engineOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
+    } catch (e) {}
+  }
+
+  stopBGM() {
+    if (this.bgmTimer) {
+      clearInterval(this.bgmTimer);
+      this.bgmTimer = null;
+    }
   }
 
   startBGM() {
     this.ensureContext();
+    if (!this.ctx || !this.enabled) return;
     if (this.bgmTimer) return;
 
     // 清新动听的公路自驾车载音乐旋律 (晴朗夏日自驾旅行)
@@ -119,11 +131,20 @@ class MusicEngine {
       659.25, 0, 783.99, 659.25, 523.25, 0, 587.33, 0
     ];
 
+    // C - G - Am - F 经典公路自驾流行和弦低音
     const bass = [
-      130.81, 130.81, 130.81, 130.81, 146.83, 146.83, 146.83, 146.83,
-      110.0, 110.0, 110.0, 110.0, 130.81, 130.81, 130.81, 130.81,
-      164.81, 164.81, 164.81, 164.81, 146.83, 146.83, 146.83, 146.83,
-      130.81, 130.81, 130.81, 130.81, 110.0, 110.0, 110.0, 110.0
+      130.81, 130.81, 130.81, 130.81, 130.81, 130.81, 130.81, 130.81, // C
+      98.00, 98.00, 98.00, 98.00, 98.00, 98.00, 98.00, 98.00,         // G
+      110.00, 110.00, 110.00, 110.00, 110.00, 110.00, 110.00, 110.00, // Am
+      87.31, 87.31, 87.31, 87.31, 87.31, 87.31, 87.31, 87.31           // F
+    ];
+
+    // 丰满车载电钢琴和弦伴奏
+    const chords = [
+      [261.63, 329.63, 392.00], // C major
+      [246.94, 293.66, 392.00], // G major
+      [220.00, 261.63, 329.63], // A minor
+      [174.61, 220.00, 261.63]  // F major
     ];
 
     this.bgmTimer = setInterval(() => {
@@ -133,16 +154,16 @@ class MusicEngine {
         return;
       }
 
-      const now = this.ctx.currentTime;
+      const now = this.ctx.currentTime + 0.01;
       const idx = this.step % 32;
 
       // 1. 动感底鼓 (Kick)
       if (idx % 4 === 0) {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.frequency.setValueAtTime(140, now);
-        osc.frequency.exponentialRampToValueAtTime(36, now + 0.12);
-        gain.gain.setValueAtTime(0.35, now);
+        osc.frequency.setValueAtTime(145, now);
+        osc.frequency.exponentialRampToValueAtTime(38, now + 0.12);
+        gain.gain.setValueAtTime(0.45, now);
         gain.gain.linearRampToValueAtTime(0.01, now + 0.13);
         osc.connect(gain);
         gain.connect(this.masterGain);
@@ -155,8 +176,8 @@ class MusicEngine {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = "sine";
-        osc.frequency.setValueAtTime(3200, now);
-        gain.gain.setValueAtTime(0.06, now);
+        osc.frequency.setValueAtTime(idx % 4 === 3 ? 3800 : 3200, now);
+        gain.gain.setValueAtTime(0.09, now);
         gain.gain.linearRampToValueAtTime(0.001, now + 0.05);
         osc.connect(gain);
         gain.connect(this.masterGain);
@@ -166,27 +187,44 @@ class MusicEngine {
 
       // 3. 弹力电贝斯 (Bassline)
       const bFreq = bass[idx];
-      if (bFreq) {
+      if (bFreq && idx % 2 === 0) {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(bFreq * 1.5, now);
-        gain.gain.setValueAtTime(0.18, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(bFreq, now);
+        gain.gain.setValueAtTime(0.28, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
         osc.connect(gain);
         gain.connect(this.masterGain);
         osc.start(now);
-        osc.stop(now + 0.13);
+        osc.stop(now + 0.19);
       }
 
-      // 4. 清爽主旋律 (Lead Melody)
+      // 4. 温润车载和弦铺底
+      if (idx % 8 === 0 || idx % 8 === 4) {
+        const chordNotes = chords[Math.floor(idx / 8)];
+        chordNotes.forEach(freq => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.005, now + 0.42);
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(now);
+          osc.stop(now + 0.43);
+        });
+      }
+
+      // 5. 清爽主旋律 (Lead Melody)
       const mFreq = melody[idx];
       if (mFreq > 0) {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = "triangle";
         osc.frequency.setValueAtTime(mFreq, now);
-        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.setValueAtTime(0.32, now);
         gain.gain.exponentialRampToValueAtTime(0.005, now + 0.22);
         osc.connect(gain);
         gain.connect(this.masterGain);
@@ -195,37 +233,51 @@ class MusicEngine {
       }
 
       this.step++;
-    }, 135);
+    }, 130);
   }
 
   playCrash() {
     this.ensureContext();
     if (!this.ctx || !this.enabled) return;
-    const now = this.ctx.currentTime;
-    // 金属猛烈撞击与破碎声音
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(160, now);
-    osc.frequency.exponentialRampToValueAtTime(20, now + 0.7);
-    gain.gain.setValueAtTime(0.85, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.75);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.75);
+    const now = this.ctx.currentTime + 0.01;
+
+    // 低频巨响冲击轰鸣
+    const boomOsc = this.ctx.createOscillator();
+    const boomGain = this.ctx.createGain();
+    boomOsc.type = "sine";
+    boomOsc.frequency.setValueAtTime(175, now);
+    boomOsc.frequency.exponentialRampToValueAtTime(22, now + 0.8);
+    boomGain.gain.setValueAtTime(1.0, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.01, now + 0.85);
+    boomOsc.connect(boomGain);
+    boomGain.connect(this.masterGain);
+    boomOsc.start(now);
+    boomOsc.stop(now + 0.85);
+
+    // 金属撞击与碎裂声
+    const crunchOsc = this.ctx.createOscillator();
+    const crunchGain = this.ctx.createGain();
+    crunchOsc.type = "sawtooth";
+    crunchOsc.frequency.setValueAtTime(380, now);
+    crunchOsc.frequency.linearRampToValueAtTime(55, now + 0.5);
+    crunchGain.gain.setValueAtTime(0.75, now);
+    crunchGain.gain.exponentialRampToValueAtTime(0.01, now + 0.55);
+    crunchOsc.connect(crunchGain);
+    crunchGain.connect(this.masterGain);
+    crunchOsc.start(now);
+    crunchOsc.stop(now + 0.55);
   }
 
   playCoin() {
     this.ensureContext();
     if (!this.ctx || !this.enabled) return;
-    const now = this.ctx.currentTime;
+    const now = this.ctx.currentTime + 0.01;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = "sine";
     osc.frequency.setValueAtTime(1046.5, now);
     osc.frequency.setValueAtTime(1567.98, now + 0.08);
-    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.setValueAtTime(0.35, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
     osc.connect(gain);
     gain.connect(this.masterGain);
@@ -236,13 +288,13 @@ class MusicEngine {
   playBoost() {
     this.ensureContext();
     if (!this.ctx || !this.enabled) return;
-    const now = this.ctx.currentTime;
+    const now = this.ctx.currentTime + 0.01;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = "sine";
     osc.frequency.setValueAtTime(220, now);
-    osc.frequency.exponentialRampToValueAtTime(650, now + 0.35);
-    gain.gain.setValueAtTime(0.28, now);
+    osc.frequency.exponentialRampToValueAtTime(680, now + 0.35);
+    gain.gain.setValueAtTime(0.32, now);
     gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
     osc.connect(gain);
     gain.connect(this.masterGain);
@@ -253,7 +305,7 @@ class MusicEngine {
   toggle() {
     this.enabled = !this.enabled;
     if (this.masterGain) {
-      this.masterGain.gain.setValueAtTime(this.enabled ? 0.55 : 0, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.enabled ? 0.85 : 0, this.ctx.currentTime);
     }
     return this.enabled;
   }
@@ -712,17 +764,17 @@ const carPhysics = {
   rollVel: 0
 };
 
-// 严谨普通家用车物理参数 (轿车轴距 2.8m，转向自然沉稳)
+// 严谨普通家用车物理参数 (特斯拉 Model 3 轴距 2.85m，高速变道平顺沉稳，零侧滑漂移)
 const PHYS = {
-  wheelbase: 2.8,          // 真实中型轿车轴距 (m)
-  maxSteerAngle: 0.38,     // 前轮最大打角 (~22度，清晰直观的前轮转向)
-  steerSpeed: 4.2,         // 方向盘转动速度
-  steerReturn: 6.0,        // 回正阻尼
-  maxHeading: 0.22,        // 变道最大允许车身航向偏角 (~12.6度，平顺切向变道)
-  headingAlignRate: 4.0,   // 松手后对齐赛道的自然循迹力矩
+  wheelbase: 2.85,         // 特斯拉中型轿车轴距 (m)
+  maxSteerAngle: 0.16,     // 前轮适度真实转向打角 (~9.2度，清晰直观的前轮转向，非卡丁车急拐)
+  steerSpeed: 4.8,         // 方向盘打舵速率
+  steerReturn: 6.8,        // 方向盘自动回正速率
+  maxHeading: 0.085,       // 高速公路平稳变道最大车身偏航角 (~4.9度，绝不甩尾漂移)
+  headingAlignRate: 5.2,   // 循迹自动对齐车道回正力矩
   suspensionOmega: 7.5,
   suspensionZeta: 0.98,
-  maxRollAngle: 0.025      // 极小真实侧倾 (~1.4度，普通轿车高速稳定感)
+  maxRollAngle: 0.02       // 真实轿车极小微弱侧倾 (~1.1度)
 };
 
 // ═══════════════════════════════════════
@@ -927,6 +979,8 @@ function resetGame() {
 
   player.group.position.set(0, 0, 0);
   player.group.rotation.set(0, 0, 0);
+  player.wheels[0].steer.rotation.set(0, 0, 0);
+  player.wheels[1].steer.rotation.set(0, 0, 0);
 
   scoreEl.textContent = "0";
   nitroBar.style.width = "100%";
@@ -934,18 +988,25 @@ function resetGame() {
 
 function startGame() {
   sound.ensureContext();
-  sound.startBGM();
-  triggerHaptic([40, 30, 50]);
+  running = true;
+  overlay.classList.add("hidden");
 
   playerName = playerNameInput.value.trim() || "自驾游车友";
   localStorage.setItem("neonRacerName", playerName);
   resetGame();
-  running = true;
-  overlay.classList.add("hidden");
+
+  if (sound.ctx && sound.ctx.state === "suspended") {
+    sound.ctx.resume().then(() => sound.startBGM()).catch(() => {});
+  } else {
+    sound.startBGM();
+  }
+  triggerHaptic([40, 30, 50]);
 }
 
 async function endGame() {
   running = false;
+  sound.stopBGM();
+
   const finalScore = Math.floor(score);
   best = Math.max(best, finalScore);
   localStorage.setItem("neonRushBest", best);
@@ -962,7 +1023,7 @@ async function endGame() {
 
   cameraTrauma = 1.0;
   sound.playCrash();
-  triggerHaptic([200, 80, 250, 80, 450]);
+  triggerHaptic([250, 100, 300, 100, 500]);
 
   createSpark(player.group.position.x, 0.6, player.group.position.z - 2.5, 0xffaa00, 35);
 
@@ -1009,7 +1070,7 @@ function update() {
 
   const dt = 1 / 60;
 
-  // 驾驶员前轮机械转向打角
+  // 驾驶员前轮机械转向打角 (向左为负，向右为正)
   let targetSteer = 0;
   if (turnLeft) targetSteer = -PHYS.maxSteerAngle;
   else if (turnRight) targetSteer = PHYS.maxSteerAngle;
@@ -1017,22 +1078,22 @@ function update() {
   const steerSpeed = targetSteer === 0 ? PHYS.steerReturn : PHYS.steerSpeed;
   carPhysics.steerAngle += (targetSteer - carPhysics.steerAngle) * Math.min(1.0, steerSpeed * dt * 3.5);
 
-  // 前轮打角带动整车绕【后轴中心】偏转 (阿克曼转向模型)
+  // 阿克曼汽车动力学：前轮打角带动整车绕【后轴中心】偏转
   // d(heading)/dt = (v / L) * tan(steerAngle)
-  const angularVelocity = (currentSpeed / PHYS.wheelbase) * Math.tan(carPhysics.steerAngle) * 0.85;
-  carPhysics.heading += angularVelocity * dt * 2.5;
+  const angularVelocity = (currentSpeed / PHYS.wheelbase) * Math.tan(carPhysics.steerAngle) * 0.8;
+  carPhysics.heading += angularVelocity * dt * 2.2;
 
   // 松开按键时，车身平滑自动回正平行于车道
   if (targetSteer === 0) {
-    carPhysics.heading += (0 - carPhysics.heading) * Math.min(1.0, PHYS.headingAlignRate * dt * 3.0);
+    carPhysics.heading += (0 - carPhysics.heading) * Math.min(1.0, PHYS.headingAlignRate * dt * 3.2);
   }
 
-  // 限制变道最大角度 (真实平稳变道)
+  // 限制变道最大角度 (真实平稳变道，绝无打滑甩尾)
   carPhysics.heading = Math.max(-PHYS.maxHeading, Math.min(PHYS.maxHeading, carPhysics.heading));
 
   // 核心定则：后轴中心严格顺着车身朝向切线前进，没有任何横向打滑！
-  // 速度在 X 轴的物理切向投影
-  const forwardVel = currentSpeed * 20.0;
+  // 速度在 X 轴的物理切向投影 (heading > 0 为向右，heading < 0 为向左)
+  const forwardVel = currentSpeed * 22.0;
   const lateralVel = forwardVel * Math.sin(carPhysics.heading);
   carPhysics.x += lateralVel * dt;
 
@@ -1049,26 +1110,29 @@ function update() {
     carPhysics.steerAngle = 0;
   }
 
-  // 底盘微弱平稳侧倾
+  // 底盘微弱平稳侧倾 (转向右时离心力向左，车身向左微倾；转向左时车身向右微倾)
   const rollAcc = -lateralVel * 0.002 - Math.pow(PHYS.suspensionOmega, 2) * carPhysics.roll - 2 * PHYS.suspensionZeta * PHYS.suspensionOmega * carPhysics.rollVel;
   carPhysics.rollVel += rollAcc * dt * 2.0;
   carPhysics.roll += carPhysics.rollVel * dt * 2.0;
   carPhysics.roll = Math.max(-PHYS.maxRollAngle, Math.min(PHYS.maxRollAngle, carPhysics.roll));
 
   // 3. 应用姿态：车体以【后轴中心】为枢轴偏转，前轮转向领航，后轮绝不打滑！
+  // 在面向 -Z 的右手坐标系中：
+  // 朝向右侧 (+X) 需要绕 Y 轴顺时针旋转，即 rotation.y 为负 (-heading)
+  // 朝向左侧 (-X) 需要绕 Y 轴逆时针旋转，即 rotation.y 为正 (-heading)
   player.group.position.x = carPhysics.x;
-  player.group.rotation.y = carPhysics.heading; // 绕后轴自然转动
-  player.group.rotation.z = carPhysics.roll;
+  player.group.rotation.y = -carPhysics.heading; // 偏航角：向右偏为负，向左偏为正
+  player.group.rotation.z = -carPhysics.roll;
 
-  // 前轮大角度明显打角转向 (左右打舵清晰可见！)
-  player.wheels[0].steer.rotation.y = carPhysics.steerAngle;
-  player.wheels[1].steer.rotation.y = carPhysics.steerAngle;
+  // 前轮机械打舵转向：向右打舵为负，向左打舵为正 (左右打舵清晰可见且方向与车头行进绝对一致！)
+  player.wheels[0].steer.rotation.y = -carPhysics.steerAngle;
+  player.wheels[1].steer.rotation.y = -carPhysics.steerAngle;
 
   // 后轮固定 0 度无相对打角，四轮平滑滚动
   player.wheels[2].steer.rotation.y = 0;
   player.wheels[3].steer.rotation.y = 0;
 
-  const wheelSpin = currentSpeed * 0.7;
+  const wheelSpin = currentSpeed * 0.75;
   player.wheels.forEach(w => {
     w.spin.rotation.x += wheelSpin;
   });
@@ -1232,12 +1296,17 @@ async function loadLeaderboard() {
 }
 
 // ═══════════════════════════════════════
-// 全局交互与事件绑定 (确保任何点击必定唤醒音乐与震动)
+// 全局交互与事件绑定 (确保任何点击手势必定唤醒音乐与震动)
 // ═══════════════════════════════════════
 function unlockAudioAndHaptics() {
   sound.ensureContext();
-  if (running) sound.startBGM();
-  triggerHaptic(1);
+  if (sound.ctx && sound.ctx.state === "suspended") {
+    sound.ctx.resume().then(() => {
+      if (running && sound.enabled && !sound.bgmTimer) sound.startBGM();
+    }).catch(() => {});
+  } else if (running && sound.enabled && !sound.bgmTimer) {
+    sound.startBGM();
+  }
 }
 
 window.addEventListener("pointerdown", unlockAudioAndHaptics, { passive: true });
