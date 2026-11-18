@@ -37,6 +37,14 @@ let baseSpeed = 1.0;
 let currentSpeed = 1.0;
 let boosting = false;
 let frame = 0;
+let raceDistance = 0;
+let finishDistance = 1500;
+let throttleHeld = false;
+let brakeHeld = false;
+let roomCode = "";
+let roomPlayerId = "";
+let remoteCar = null;
+let roomPollTimer = null;
 let impactTimer = null;
 let tiltEnabled = false;
 let tiltSteer = 0;
@@ -54,12 +62,12 @@ let currentTheme = localStorage.getItem("racerSceneTheme") || "country";
 // ── API 接口 ──
 const api = {
   async get(path) {
-    const res = await fetch(path);
+    const res = await fetch(`https://api.game.yhj123.dpdns.org${path}`);
     if (!res.ok) throw new Error(`GET ${path} failed`);
     return res.json();
   },
   async post(path, body) {
-    const res = await fetch(path, {
+    const res = await fetch(`https://api.game.yhj123.dpdns.org${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
@@ -68,6 +76,47 @@ const api = {
     return res.json();
   }
 };
+
+async function connectRaceRoom(action, code = "") {
+  const result = await api.post("/api/race/rooms", {
+    action,
+    roomCode: code,
+    name: playerNameInput.value.trim() || "车手"
+  });
+  roomCode = result.roomCode;
+  roomPlayerId = result.playerId;
+  document.querySelector("#roomStatus").textContent = `房间码 ${roomCode} · 等待朋友加入`;
+  if (roomPollTimer) clearInterval(roomPollTimer);
+  roomPollTimer = setInterval(syncRaceRoom, 160);
+}
+
+async function syncRaceRoom() {
+  if (!roomCode || !roomPlayerId) return;
+  try {
+    await api.post("/api/race/state", {
+      roomCode, playerId: roomPlayerId, x: carPhysics.x,
+      heading: carPhysics.heading, speed: currentSpeed, distance: raceDistance
+    });
+    const result = await api.get(`/api/race/state?roomCode=${roomCode}&playerId=${roomPlayerId}`);
+    const other = result.players[0];
+    if (!other) {
+      document.querySelector("#roomStatus").textContent = `房间码 ${roomCode} · 等待朋友加入`;
+      return;
+    }
+    document.querySelector("#roomStatus").textContent = `房间 ${roomCode} · 对手：${other.name}`;
+    if (!remoteCar) {
+      remoteCar = createTeslaCar(false, 0x36e5ff);
+      scene.add(remoteCar.group);
+    }
+    const gap = other.distance - raceDistance;
+    const z = Math.max(-180, Math.min(20, -gap * 0.45));
+    remoteCar.group.position.x += ((other.x + trackCurve(other.distance)) - remoteCar.group.position.x) * 0.35;
+    remoteCar.group.position.z += (z - remoteCar.group.position.z) * 0.35;
+    remoteCar.group.rotation.y = -other.heading;
+  } catch (error) {
+    document.querySelector("#roomStatus").textContent = "联机断开，请重新加入房间";
+  }
+}
 
 // ═══════════════════════════════════════
 // 100% 稳定运行的真实公路自驾车载音乐与声效系统 (HTML5 Audio + WebAudio 深度双引擎)
@@ -398,9 +447,13 @@ const ROAD_WIDTH = 20;
 // 三车道让中间车道中心与玩家起始位置 x=0 对齐，直行不避让就会遇到车流。
 const LANE_COUNT = 3;
 const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
-const ROAD_SEGMENT_LENGTH = 140;
-const ROAD_SEGMENTS = 4;
+const ROAD_SEGMENT_LENGTH = 24;
+const ROAD_SEGMENTS = 24;
 const TOTAL_ROAD_LEN = ROAD_SEGMENT_LENGTH * ROAD_SEGMENTS;
+
+function trackCurve(distance) {
+  return 7 * Math.sin(distance / 190) + 3.5 * Math.sin(distance / 82);
+}
 
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
@@ -816,6 +869,19 @@ const player = createTeslaCar(true, 0xf0f3f6);
 scene.add(player.group);
 player.group.position.set(0, 0, 0);
 
+const finishGate = new THREE.Group();
+const gateMaterial = new THREE.MeshStandardMaterial({ color: 0xffcc33, emissive: 0x442200 });
+const gatePostGeometry = new THREE.BoxGeometry(0.5, 6, 0.5);
+[-1, 1].forEach(side => {
+  const post = new THREE.Mesh(gatePostGeometry, gateMaterial);
+  post.position.set(side * (ROAD_WIDTH / 2 - 0.5), 3, 0);
+  finishGate.add(post);
+});
+const gateTop = new THREE.Mesh(new THREE.BoxGeometry(ROAD_WIDTH, 0.65, 0.55), gateMaterial);
+gateTop.position.y = 6;
+finishGate.add(gateTop);
+scene.add(finishGate);
+
 // ═══════════════════════════════════════
 // 纯正物理车辆运动学 (后轴中心旋转，零侧滑漂移)
 // ═══════════════════════════════════════
@@ -853,6 +919,7 @@ function spawnTraffic() {
   const enemy = createTeslaCar(false, color);
 
   enemy.group.position.set(laneX, 0, -200);
+  enemy.laneX = laneX;
   enemy.speed = 0.22 + Math.random() * 0.18;
   scene.add(enemy.group);
   traffic.push(enemy);
@@ -874,6 +941,7 @@ function spawnCoin() {
   const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
   const coinMesh = new THREE.Mesh(coinGeo, coinMat);
   coinMesh.position.set(laneX, 0.85, -220);
+  coinMesh.userData.laneX = laneX;
   scene.add(coinMesh);
   coins.push(coinMesh);
 }
@@ -974,6 +1042,7 @@ function applyTheme(themeKey) {
     const offset = ROAD_WIDTH / 2 + 1.2 + Math.random() * 4.0;
     const zPos = - (i * 3.6);
     item.position.set(side * offset, 0, zPos);
+    item.userData.trackX = item.position.x;
     item.userData = {
       ...item.userData,
       baseY: item.position.y,
@@ -1022,7 +1091,7 @@ function buildRoadSegment(zOffset, theme) {
   // 道路白线
   for (let i = 1; i < LANE_COUNT; i++) {
     const laneX = -ROAD_WIDTH / 2 + i * LANE_WIDTH;
-    for (let s = 0; s < 10; s++) {
+    for (let s = 0; s < 2; s++) {
       const stripe = new THREE.Mesh(
         new THREE.PlaneGeometry(0.24, 6),
         new THREE.MeshBasicMaterial({ color: theme.stripeColor })
@@ -1048,7 +1117,7 @@ function buildRoadSegment(zOffset, theme) {
   railR.castShadow = true;
 
   // 连续的道路反光柱：强化道路边界、速度参照和两侧装饰层次。
-  for (let marker = 0; marker < 6; marker++) {
+  for (let marker = 0; marker < Math.floor(ROAD_SEGMENT_LENGTH / 24); marker++) {
     const z = -ROAD_SEGMENT_LENGTH / 2 + marker * 24 + 10;
     [-1, 1].forEach(side => {
       const post = new THREE.Group();
@@ -1091,8 +1160,12 @@ function resetGame() {
 
   score = 0;
   nitro = 100;
-  baseSpeed = 1.0;
+  baseSpeed = 0;
   frame = 0;
+  raceDistance = 0;
+  finishDistance = Number(document.querySelector("#raceLength")?.value || 1500);
+  document.querySelector("#raceProgressBar").style.width = "0%";
+  document.querySelector("#raceProgressText").textContent = `0 / ${finishDistance} m`;
   cameraTrauma = 0;
 
   carPhysics.x = 0;
@@ -1117,6 +1190,7 @@ function resetGame() {
     const color = trafficColors[idx % trafficColors.length];
     const enemy = createTeslaCar(false, color);
     enemy.group.position.set(laneX, 0, z);
+    enemy.laneX = laneX;
     enemy.speed = 0.22 + Math.random() * 0.16;
     scene.add(enemy.group);
     traffic.push(enemy);
@@ -1135,6 +1209,16 @@ function startGame() {
   sound.startBGM();
   if (soundStatus) soundStatus.textContent = "🔊 引擎、音乐、碰撞音效已开启";
   triggerHaptic(40);
+}
+
+function finishRace() {
+  if (!running) return;
+  running = false;
+  sound.stopBGM();
+  title.textContent = "冲过终点！";
+  message.innerHTML = `完成 ${Math.floor(finishDistance / 100) / 10} km 卡丁车赛道！<br>最终成绩：<b style="color:#61efff;font-size:24px">${Math.floor(score)}</b>`;
+  document.querySelector("#start").textContent = "再跑一圈";
+  overlay.classList.remove("hidden");
 }
 
 async function endGame() {
@@ -1177,7 +1261,7 @@ function update() {
   frame++;
 
   // 1. 速度与加速
-  const accelerating = keys.KeyW || keys.ArrowUp;
+  const accelerating = keys.KeyW || keys.ArrowUp || keys.throttle;
   const wantsBoost = (keys.Space || keys.boost) && nitro > 0;
 
   if (wantsBoost && !boosting) {
@@ -1188,9 +1272,26 @@ function update() {
   nitro = boosting ? Math.max(0, nitro - 0.7) : Math.min(100, nitro + 0.12);
 
   // 手机与电脑默认同速；键盘油门只略微提速，避免平台间速度差异过大。
-  const targetSpeed = accelerating ? 1.12 : 1.0;
-  baseSpeed += (targetSpeed - baseSpeed) * 0.05;
-  currentSpeed = baseSpeed + (boosting ? 0.35 : 0);
+  const braking = brakeHeld || keys.brake || keys.KeyS || keys.ArrowDown;
+  if (braking) {
+    baseSpeed = Math.max(0, baseSpeed - 0.045);
+  } else if (accelerating || throttleHeld) {
+    baseSpeed = Math.min(200 / 90, baseSpeed + 0.012);
+  } else {
+    baseSpeed = Math.max(0, baseSpeed - 0.006);
+  }
+  currentSpeed = Math.min(200 / 90, baseSpeed + (boosting ? 0.35 : 0));
+  raceDistance += (currentSpeed * 90) / 3.6 / 60;
+  const progress = Math.min(1, raceDistance / finishDistance);
+  finishGate.position.set(trackCurve(finishDistance), 0, -(finishDistance - raceDistance));
+  const raceBar = document.querySelector("#raceProgressBar");
+  const raceText = document.querySelector("#raceProgressText");
+  if (raceBar) raceBar.style.width = `${progress * 100}%`;
+  if (raceText) raceText.textContent = `${Math.floor(raceDistance)} / ${finishDistance} m`;
+  if (raceDistance >= finishDistance) {
+    finishRace();
+    return;
+  }
 
   score += currentSpeed * 0.45;
   nitroBar.style.width = `${nitro}%`;
@@ -1262,7 +1363,7 @@ function update() {
   // 在面向 -Z 的右手坐标系中：
   // 朝向右侧 (+X) 需要绕 Y 轴顺时针旋转，即 rotation.y 为负 (-heading)
   // 朝向左侧 (-X) 需要绕 Y 轴逆时针旋转，即 rotation.y 为正 (-heading)
-  player.group.position.x = carPhysics.x;
+  player.group.position.x = carPhysics.x + trackCurve(raceDistance);
   player.group.position.y = Math.sin(frame * 0.16) * 0.012 + Math.abs(carPhysics.rollVel) * 0.018;
   player.group.rotation.y = -carPhysics.heading; // 偏航角：向右偏为负，向左偏为正
   player.group.rotation.z = -carPhysics.roll;
@@ -1287,6 +1388,10 @@ function update() {
     if (seg.position.z > ROAD_SEGMENT_LENGTH) {
       seg.position.z -= TOTAL_ROAD_LEN;
     }
+    const roadDistance = raceDistance - seg.position.z;
+    seg.position.x = trackCurve(roadDistance);
+    const curveSlope = (trackCurve(roadDistance + 2) - trackCurve(roadDistance - 2)) / 4;
+    seg.rotation.y = -Math.atan(curveSlope);
   });
 
   sceneryObjects.forEach(item => {
@@ -1294,6 +1399,7 @@ function update() {
     if (item.position.z > 25) {
       item.position.z -= 540;
     }
+    item.position.x = item.userData.trackX + trackCurve(raceDistance - item.position.z);
     // 风吹植被和装饰物轻摆，避免所有景物像静态积木。
     const sway = item.userData && item.userData.swayPhase;
     if (sway !== undefined) {
@@ -1317,6 +1423,7 @@ function update() {
   for (let i = traffic.length - 1; i >= 0; i--) {
     const enemy = traffic[i];
     enemy.group.position.z += moveZ - enemy.speed * 1.0;
+    enemy.group.position.x = enemy.laneX + trackCurve(raceDistance - enemy.group.position.z);
     enemy.group.position.y = Math.sin(frame * 0.11 + i) * 0.01;
     enemy.group.rotation.z = Math.sin(frame * 0.08 + i) * 0.006;
     enemy.wheels.forEach(w => {
@@ -1344,6 +1451,7 @@ function update() {
   for (let i = coins.length - 1; i >= 0; i--) {
     const coin = coins[i];
     coin.position.z += moveZ;
+    coin.position.x = coin.userData.laneX + trackCurve(raceDistance - coin.position.z);
     coin.rotation.z += 0.05;
 
     const dx = Math.abs(player.group.position.x - coin.position.x);
@@ -1378,7 +1486,7 @@ function update() {
   }
 
   // 8. 第三人称跟随相机 (贴近真实自驾后视角)
-  const targetCamX = carPhysics.x * 0.72;
+  const targetCamX = (carPhysics.x + trackCurve(raceDistance)) * 0.72;
   const targetCamY = boosting ? 3.3 : 3.5;
   const targetCamZ = boosting ? 6.5 : 6.0; // 紧贴车尾
 
@@ -1634,6 +1742,29 @@ if (audioToggle) {
 bindButton("#left", "left");
 bindButton("#right", "right");
 bindButton("#boost", "boost");
+
+function bindPedal(selector, key) {
+  const button = document.querySelector(selector);
+  if (!button) return;
+  const release = () => { keys[key] = false; };
+  button.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    keys[key] = true;
+    button.setPointerCapture?.(event.pointerId);
+  });
+  ["pointerup", "pointercancel", "lostpointercapture", "pointerleave"].forEach(type => button.addEventListener(type, release));
+}
+bindPedal("#throttle", "throttle");
+bindPedal("#brake", "brake");
+
+document.querySelector("#createRoom")?.addEventListener("click", async () => {
+  try { await connectRaceRoom("create"); }
+  catch (error) { document.querySelector("#roomStatus").textContent = error.message; }
+});
+document.querySelector("#joinRoom")?.addEventListener("click", async () => {
+  try { await connectRaceRoom("join", document.querySelector("#roomCodeInput").value); }
+  catch (error) { document.querySelector("#roomStatus").textContent = error.message; }
+});
 
 // 开始按钮绑定：同时支持 touchend 与 click (针对苹果 Safari 零延迟手势)
 const startBtn = document.querySelector("#start");

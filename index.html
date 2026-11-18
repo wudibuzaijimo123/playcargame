@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
   <!-- 3D WebGL Canvas 容器 -->
@@ -53,6 +53,7 @@
       <strong id="best">0</strong>
       <span>最高纪录</span>
     </div>
+    <div class="race-progress"><div id="raceProgressBar"></div><span id="raceProgressText">0 / 1500 m</span></div>
   </section>
 
   <aside class="leaderboard" aria-label="排行榜">
@@ -83,8 +84,12 @@
     </div>
     <div class="control-pad">
       <button id="left" aria-label="向左转">&larr;</button>
-      <button class="boost" id="boost" aria-label="提速">提速<br><span style="font-size:9px;opacity:0.85">加速</span></button>
+      <button class="boost" id="boost" aria-label="氮气加速">氮气</button>
       <button id="right" aria-label="向右转">&rarr;</button>
+    </div>
+    <div class="pedal-controls">
+      <button id="brake" type="button">刹车</button>
+      <button id="throttle" type="button">油门</button>
     </div>
   </div>
 
@@ -129,6 +134,14 @@
         </div>
         <div class="steering-help" id="steeringHelp">使用屏幕方向键或电脑键盘控制</div>
       </div>
+      <label class="race-length-field">比赛距离
+        <select id="raceLength"><option value="1500">短程 1.5 km</option><option value="3000">标准 3 km</option></select>
+      </label>
+      <div class="room-controls">
+        <button id="createRoom" type="button">创建联机房间</button>
+        <div><input id="roomCodeInput" maxlength="6" placeholder="输入朋友的房间码"><button id="joinRoom" type="button">加入</button></div>
+        <div id="roomStatus">单人比赛</div>
+      </div>
       <!-- 苹果 iOS Safari 提示与试听测试 -->
       <div style="background:rgba(255,180,0,0.12);border:1px solid rgba(255,200,0,0.35);border-radius:10px;padding:8px 12px;margin:8px 0 12px;font-size:11px;color:#ffeaa7;line-height:1.5;text-align:left;">
         🔔 <b>苹果 iPhone / Safari 用户提示：</b><br>
@@ -152,6 +165,6 @@
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=18"></script>
+  <script src="game.js?v=19"></script>
 </body>
 </html>

@@ -591,6 +591,20 @@ p {
   align-items: flex-end;
   justify-content: space-between;
 }
+.pedal-controls { display: flex; justify-content: center; gap: 12px; }
+.controls .pedal-controls button { width: 108px; height: 42px; border-radius: 14px; font-size: 14px; }
+.controls #throttle { background: linear-gradient(120deg,#18a878,#54e2a6); color: #041a12; }
+.controls #brake { background: linear-gradient(120deg,#a52d45,#ff667d); color: white; }
+.race-length-field { display: grid; gap: 6px; margin: 10px 0; color: #aeb5da; font-size: 12px; }
+.race-length-field select { padding: 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 9px; background: #101a38; color: white; }
+.room-controls { display: grid; gap: 8px; margin: 10px 0; }
+.room-controls > div:nth-child(2) { display: flex; gap: 8px; }
+.room-controls input { min-width: 0; flex: 1; padding: 9px; border-radius: 8px; }
+.room-controls button { padding: 8px 12px; border: 1px solid rgba(98,239,255,.4); border-radius: 8px; background: rgba(15,35,65,.9); color: #a8f0ff; }
+.room-controls #roomStatus { color: #76f6ff; font-size: 12px; }
+.race-progress { grid-column: 1 / -1; height: 18px; position: relative; border-radius: 99px; background: rgba(8,13,31,.78); overflow: hidden; }
+.race-progress div { height: 100%; width: 0; background: linear-gradient(90deg,#37e8ff,#bc66ff); }
+.race-progress span { position: absolute; inset: 0; text-align: center; font-size: 11px; line-height: 18px; }
 
 .controls button {
   width: 74px;
