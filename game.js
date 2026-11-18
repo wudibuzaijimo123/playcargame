@@ -395,7 +395,8 @@ let cameraTrauma = 0;
 // 赛道与自然场景配置
 // ═══════════════════════════════════════
 const ROAD_WIDTH = 20;
-const LANE_COUNT = 4;
+// 三车道让中间车道中心与玩家起始位置 x=0 对齐，直行不避让就会遇到车流。
+const LANE_COUNT = 3;
 const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
 const ROAD_SEGMENT_LENGTH = 140;
 const ROAD_SEGMENTS = 4;
