@@ -1,52 +1,19 @@
-# Neon Racer
+# PlayCarGame（霓虹赛车 · 双人联机）
 
-一个可以部署到服务器的前后端小游戏1。前端是 Canvas 霓虹赛车，后端是 Node.js HTTP 服务，负责静态资源托管、健康检查和服务器排行榜。
+前端与后端同机部署：`https://game.yhj123.dpdns.org` 由阿里云 nginx 反向代理到本机 Node（127.0.0.1:3210），
+页面与 `/api/*` 同源，不再依赖 GitHub Pages。
 
-## 本地运行
+- 架构 / 改代码说明：[docs/FRAMEWORK.md](docs/FRAMEWORK.md)
+- 服务器首次初始化：`bash /opt/playcargame/deploy/bootstrap.sh`
+- 日常发布：`pwsh -File scripts/deploy-remote.ps1 -Message "改了什么"`
+- 健康检查：`curl https://game.yhj123.dpdns.org/api/health`
 
-```bash
-npm start
+## 本地目录
+
 ```
-
-打开：
-
-```text
-http://localhost:3000
-```
-
-## 接口
-
-```text
-GET /api/health
-GET /api/scores
-POST /api/scores
-```
-
-提交成绩示例：
-
-```json
-{
-  "name": "玩家",
-  "score": 1200
-}
-```
-
-## 部署
-
-上传整个项目到服务器后，安装 Node.js 18 或以上版本，然后运行：
-
-```bash
-npm start
-```
-
-生产环境可以用服务器平台提供的 `PORT` 环境变量，程序会自动读取：
-
-```bash
-PORT=8080 npm start
-```
-
-排行榜数据保存在：
-
-```text
-data/scores.json
+index.html  game.js  style.css  assets/    前端
+server.js                                    Node 服务（静态 + API）
+deploy/                                      nginx / systemd / 部署脚本
+scripts/                                     Windows 端发布脚本
+data/                                        运行时数据（不进 git）
 ```
