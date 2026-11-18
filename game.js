@@ -32,6 +32,7 @@ const soundStatus = document.querySelector("#soundStatus");
 // ── 基础运行状态 ──
 let running = false;
 let score = 0;
+let raceTime = 0;            // 比赛用时（秒），按固定步长累计，保证两人可比
 let nitro = 100;
 let baseSpeed = 1.0;
 let currentSpeed = 1.0;
@@ -53,9 +54,17 @@ let steeringMode = "buttons";
 const keys = {};
 
 let best = Number(localStorage.getItem("neonRushBest") || 0);
+let bestTime = Number(localStorage.getItem("racerBestTime") || 0);   // 秒，0 表示还没跑过
+
+function formatRaceTime(sec) {
+  if (!sec || !isFinite(sec)) return "--";
+  const m = Math.floor(sec / 60);
+  const s = sec - m * 60;
+  return `${m}:${s.toFixed(1).padStart(4, "0")}`;
+}
 let playerName = localStorage.getItem("neonRacerName") || "";
 playerNameInput.value = playerName;
-bestEl.textContent = best;
+bestEl.textContent = formatRaceTime(bestTime);
 
 let currentTheme = localStorage.getItem("racerSceneTheme") || "country";
 
@@ -79,64 +88,354 @@ async function resolveApiBase() {
   return apiBase;
 }
 
+// 离线版：所有网络请求直接禁用
+const OFFLINE_MODE = true;
+
 const api = {
-  async get(path) {
+  async request(path, options) {
+    if (OFFLINE_MODE) throw new Error("离线版不联网");
     const base = await resolveApiBase();
-    const res = await fetch(`${base}${path}`);
-    if (!res.ok) throw new Error(`GET ${path} failed`);
+    let res;
+    try {
+      res = await fetch(`${base}${path}`, options);
+    } catch (error) {
+      throw new Error("网络不通，请检查手机网络后重试");
+    }
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const data = await res.json();
+        if (data && (data.error || data.message)) detail = String(data.error || data.message);
+      } catch (error) { /* 响应不是 JSON */ }
+      const fallback =
+        res.status === 404 ? "房间不存在，请核对房间码" :
+        res.status === 409 ? "房间已满（最多两名车手）" :
+        res.status >= 500 ? "服务器正在重启，请 3 秒后再试" :
+        `请求失败（${res.status}）`;
+      throw new Error(detail || fallback);
+    }
     return res.json();
   },
-  async post(path, body) {
-    const base = await resolveApiBase();
-    const res = await fetch(`${base}${path}`, {
+  get(path) {
+    return this.request(path);
+  },
+  post(path, body) {
+    return this.request(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    if (!res.ok) throw new Error(`POST ${path} failed`);
-    return res.json();
   }
 };
 
-async function connectRaceRoom(action, code = "") {
-  const result = await api.post("/api/race/rooms", {
-    action,
-    roomCode: code,
-    name: playerNameInput.value.trim() || "车手"
-  });
+// 手动房号：两个人输一样的号就进同一个房间，先到的人自动建房
+async function enterRaceRoom(rawCode) {
+  if (OFFLINE_MODE) return;
+  const code = String(rawCode || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  if (code.length < 3) {
+    document.querySelector("#roomStatus").textContent = "先输入房间号（至少 3 位），两人输一样的号就能进同一个房间";
+    return;
+  }
+  // 手里还握着旧座位就先释放，保证"退出后再进来"永远能成功
+  if (roomCode && roomPlayerId) {
+    await leaveRaceRoom(true);
+  }
+  let result = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      result = await api.post("/api/race/rooms", {
+        action: "join",
+        roomCode: code,
+        name: playerNameInput.value.trim() || "车手",
+        finishDistance: Number(document.querySelector("#raceLength")?.value || 1500)
+      });
+      break;
+    } catch (error) {
+      if (attempt === 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
   roomCode = result.roomCode;
   roomPlayerId = result.playerId;
-  document.querySelector("#roomStatus").textContent = `房间码 ${roomCode} · 等待朋友加入`;
+  raceSync.myLane = Number(result.lane) || 0;
+  raceSync.myColor = result.color || "#ffffff";
+  const total = Number(result.playerCount) || 1;
+  document.querySelector("#roomStatus").textContent = total >= 2
+    ? `房间 ${roomCode} · 两人已就位，马上发车`
+    : `房间 ${roomCode} · 等待对手（让他也输 ${roomCode} 点「进入房间」）`;
+  const input = document.querySelector("#roomCodeInput");
+  if (input) input.value = roomCode;
+  setRoomBadge(roomCode);
   if (roomPollTimer) clearInterval(roomPollTimer);
-  roomPollTimer = setInterval(syncRaceRoom, 160);
+  roomPollTimer = setInterval(syncRaceRoom, 60);
+  startRaceStream();
+  applyRaceStart(result);
+}
+
+// 兼容旧调用点
+async function connectRaceRoom(action, code = "") {
+  await enterRaceRoom(code);
+}
+
+// 退出房间：释放服务器座位、断开推送、清掉本地房间状态
+async function leaveRaceRoom(silent = false) {
+  const code = roomCode;
+  const id = roomPlayerId;
+  if (code && id) {
+    try { await api.post("/api/race/leave", { roomCode: code, playerId: id }); } catch (error) { /* 忽略 */ }
+  }
+  if (raceStream) {
+    try { raceStream.close(); } catch (error) { /* ignore */ }
+    raceStream = null;
+  }
+  if (roomPollTimer) {
+    clearInterval(roomPollTimer);
+    roomPollTimer = null;
+  }
+  roomCode = "";
+  roomPlayerId = "";
+  raceSync.armed = false;
+  raceSync.locked = false;
+  raceSync.startAt = 0;
+  raceSync.other = null;
+  lastGapLabel = "";
+  if (remoteCar) {
+    scene.remove(remoteCar.group);
+    remoteCar = null;
+  }
+  const countdown = document.querySelector("#raceCountdown");
+  if (countdown) countdown.style.display = "none";
+  setRoomBadge("");
+  if (!silent) {
+    document.querySelector("#roomStatus").textContent = "已退出房间，输入房间号可以重新进入";
+    running = false;
+  }
+}
+
+// ── 联机同步开局：两人同时回到同一起跑线 ──
+const raceSync = { startAt: 0, armed: false, locked: false, remoteId: "" };
+
+function ensureCountdownEl() {
+  let el = document.querySelector("#raceCountdown");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "raceCountdown";
+    el.style.cssText =
+      "position:fixed;left:0;right:0;top:0;bottom:0;display:none;align-items:center;" +
+      "justify-content:center;font:900 min(20vw,150px)/1 'Orbitron','Rajdhani',sans-serif;" +
+      "color:#61efff;text-shadow:0 0 30px rgba(97,239,255,.85);pointer-events:none;z-index:9999;";
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function applyRaceStart(payload) {
+  if (!payload || !payload.startAt) return;
+  const serverNow = Number(payload.serverNow) || Date.now();
+  const clockOffset = serverNow - Date.now();          // 服务器时钟领先本地的毫秒数
+  const localStart = Number(payload.startAt) - clockOffset;
+  // 服务端重新定了发车时刻（有人重进房间）→ 跟着重排，不再被 armed 挡死
+  if (raceSync.armed && Math.abs(localStart - raceSync.startAt) < 400) return;
+  raceSync.startAt = localStart;
+  raceSync.armed = true;
+  if (Number(payload.finishDistance) > 0) {
+    finishDistance = Number(payload.finishDistance);
+    const sel = document.querySelector("#raceLength");
+    if (sel) sel.value = String(finishDistance);
+  }
+  startMultiRaceCountdown();
+}
+
+function startMultiRaceCountdown() {
+  raceSync.locked = true;
+  const el = ensureCountdownEl();
+  const status = document.querySelector("#roomStatus");
+  const tick = () => {
+    const left = Math.ceil((raceSync.startAt - Date.now()) / 1000);
+    if (left > 0) {
+      el.style.display = "flex";
+      el.textContent = String(left);
+      if (status) status.textContent = `房间 ${roomCode} · ${left} 秒后一起发车`;
+      setTimeout(tick, 120);
+      return;
+    }
+    el.style.display = "flex";
+    el.textContent = "GO";
+    launchMultiRace();
+    setTimeout(() => { el.style.display = "none"; }, 700);
+  };
+  tick();
+}
+
+function launchMultiRace() {
+  raceSync.locked = false;
+  sound.ensureContext();
+  resetGame();                       // 两人同一时刻归零 → 同一起跑线
+  // 真实车道：服务器给每人分配了左/右车道，画面上不再给对手加假的偏移
+  carPhysics.x = (raceSync.myLane || 0) * LANE_WIDTH * 0.5;
+  player.group.position.x = carPhysics.x;
+  // 车身颜色也用服务器分配的那套，两边看到的是同一世界
+  if (raceSync.myColor && player.group.userData.paintMaterial) {
+    player.group.userData.paintMaterial.color.set(raceSync.myColor);
+  }
+  raceSync.renderOffsetX = 0;
+  running = true;
+  overlay.classList.add("hidden");
+  document.querySelector("#roomStatus").textContent = "发车！";
+  sound.startBGM();
+  triggerHaptic([40, 60, 120]);
 }
 
 async function syncRaceRoom() {
   if (!roomCode || !roomPlayerId) return;
   try {
-    await api.post("/api/race/state", {
+    const posted = await api.post("/api/race/state", {
       roomCode, playerId: roomPlayerId, x: carPhysics.x,
-      heading: carPhysics.heading, speed: currentSpeed, distance: raceDistance
+      heading: carPhysics.heading, speed: currentSpeed, distance: raceDistance,
+      finished: !running && raceDistance >= finishDistance,
+      time: raceTime
     });
-    const result = await api.get(`/api/race/state?roomCode=${roomCode}&playerId=${roomPlayerId}`);
-    const other = result.players[0];
+    applyRaceStart(posted);
+    // 兜底：两人都在房间里但服务端暂时没给出统一时刻（例如刚被重置），本地 3 秒后发车
+    if (!raceSync.armed && Number(posted.playerCount) >= 2) {
+      raceSync.startAt = Date.now() + 3000;
+      raceSync.armed = true;
+      startMultiRaceCountdown();
+    }
+    // 服务端在一次 POST 里就带回对手，省掉每帧一次的 GET（手机端明显更流畅）
+    let other = (posted.players || [])[0];
+    if (!posted.players) {
+      const result = await api.get(`/api/race/state?roomCode=${roomCode}&playerId=${roomPlayerId}`);
+      other = result.players[0];
+    }
     if (!other) {
       document.querySelector("#roomStatus").textContent = `房间码 ${roomCode} · 等待朋友加入`;
+      if (raceSync.locked) {                 // 对手跑了就别把玩家冻在倒计时里
+        raceSync.locked = false;
+        raceSync.armed = false;
+        const el = document.querySelector("#raceCountdown");
+        if (el) el.style.display = "none";
+      }
       return;
     }
-    document.querySelector("#roomStatus").textContent = `房间 ${roomCode} · 对手：${other.name}`;
-    if (!remoteCar) {
-      remoteCar = createTeslaCar(false, 0x36e5ff);
-      scene.add(remoteCar.group);
-    }
-    const gap = other.distance - raceDistance;
-    const z = Math.max(-180, Math.min(20, -gap * 0.45));
-    remoteCar.group.position.x += ((other.x + trackCurve(other.distance)) - remoteCar.group.position.x) * 0.35;
-    remoteCar.group.position.z += (z - remoteCar.group.position.z) * 0.35;
-    remoteCar.group.rotation.y = -other.heading;
+    raceSync.remoteId = other.id;
+    updateRemoteCar(other);
   } catch (error) {
     document.querySelector("#roomStatus").textContent = "联机断开，请重新加入房间";
+    setRoomBadge(roomCode, true);
   }
+}
+
+// 对手状态只做采样记录，真正的绘制放到每一帧里按外推计算，保证相对运动连续
+function updateRemoteCar(other) {
+  raceSync.remoteId = other.id;
+  raceSync.other = {
+    id: other.id,
+    name: other.name,
+    x: Number(other.x) || 0,
+    heading: Number(other.heading) || 0,
+    speed: Number(other.speed) || 0,
+    distance: Number(other.distance) || 0,
+    finishTime: Number(other.finishTime) || 0,
+    at: Date.now()
+  };
+  raceSync.remoteName = other.name;
+
+  if (!remoteCar) {
+    // 对手车的颜色同样来自服务器，双方看到同一台车同一个颜色
+    remoteCar = createTeslaCar(false, other.color || "#ff9a3c");
+    scene.add(remoteCar.group);
+  } else if (other.color && remoteCar.group.userData.paintMaterial) {
+    remoteCar.group.userData.paintMaterial.color.set(other.color);
+  }
+  if (!raceSync.tag || raceSync.tagName !== other.name) {
+    if (raceSync.tag) remoteCar.group.remove(raceSync.tag);
+    raceSync.tag = makeNameTag(other.name);
+    raceSync.tagName = other.name;
+    remoteCar.group.add(raceSync.tag);
+  }
+  refreshGapHud();
+}
+
+// 每分钟只需更新文字，避免状态栏每 40ms 抖一次
+let lastGapLabel = "";
+let lastGapAt = 0;
+function refreshGapHud() {
+  const other = raceSync.other;
+  if (!other) return;
+  const rel = other.distance - raceDistance;
+  const gap = Math.abs(Math.round(rel));
+  const gapLabel = gap < 3 ? "并驾齐驱" : (rel >= 0 ? `落后 ${gap} m` : `领先 ${gap} m`);
+  const mine = Math.round(raceDistance);
+  const theirs = Math.round(other.distance);
+  const now = Date.now();
+  const badgeText = `我 ${mine}m · 对手 ${theirs}m · ${gapLabel}`;
+  if (badgeText === lastGapLabel || now - lastGapAt < 250) return;
+  lastGapLabel = badgeText;
+  lastGapAt = now;
+  const status = document.querySelector("#roomStatus");
+  if (status) status.textContent = `房间 ${roomCode} · 对手：${other.name} · ${badgeText}`;
+  setRoomBadge(roomCode, false, badgeText);
+}
+
+// 每一帧：用对手上报的里程 + 速度外推，画出真实的相对运动
+function syncRemoteCarVisual() {
+  const o = raceSync.other;
+  if (!o || !remoteCar) return;
+  const elapsed = Math.max(0, Math.min(0.25, (Date.now() - o.at) / 1000));
+  // 上报速度单位换算成实际前进：speed * 90 / 3.6 米每秒
+  const projected = o.distance + (o.speed * 90 / 3.6) * elapsed;
+  const rel = projected - raceDistance;             // 真实差距，1 米 = 1 米
+  const targetZ = Math.max(-560, Math.min(80, -rel));
+  const targetX = o.x + trackCurve(projected);
+  remoteCar.group.position.z += (targetZ - remoteCar.group.position.z) * 0.6;
+  remoteCar.group.position.x += (targetX - remoteCar.group.position.x) * 0.6;
+  remoteCar.group.rotation.y = -o.heading;
+  refreshGapHud();
+}
+
+// 实时推送通道：服务端每 40ms 推一次对手状态，比轮询快得多
+let raceStream = null;
+
+function startRaceStream() {
+  if (raceStream) {
+    try { raceStream.close(); } catch (error) { /* ignore */ }
+    raceStream = null;
+  }
+  if (!roomCode || !roomPlayerId) return;
+  if (typeof EventSource === "undefined") return;
+  const base = apiBase || "";
+  try {
+    const url = `${base}/api/race/stream?roomCode=${encodeURIComponent(roomCode)}&playerId=${encodeURIComponent(roomPlayerId)}`;
+    raceStream = new EventSource(url);
+    raceStream.onmessage = (event) => {
+      let data = null;
+      try { data = JSON.parse(event.data); } catch (error) { return; }
+      if (!data) return;
+      applyRaceStart(data);
+      const other = (data.players || [])[0];
+      if (other) updateRemoteCar(other);
+    };
+    raceStream.onerror = () => { /* 断线时轮询仍然在跑，自动兜底 */ };
+  } catch (error) {
+    raceStream = null;
+  }
+}
+
+// 右上角常驻房间号徽章
+function setRoomBadge(code, offline = false, gapText = "") {
+  const el = document.querySelector("#roomBadge");
+  if (!el) return;
+  if (!code) {
+    el.style.display = "none";
+    el.textContent = "";
+    return;
+  }
+  el.style.display = "block";
+  const suffix = gapText ? ` · ${gapText}` : "";
+  el.textContent = offline ? `房间 ${code} · 已断开` : `房间 ${code}${suffix}`;
+  el.style.color = offline ? "#ff8a8a" : "#61efff";
+  el.style.borderColor = offline ? "rgba(255,138,138,.5)" : "rgba(97,239,255,.45)";
 }
 
 // ═══════════════════════════════════════
@@ -144,7 +443,8 @@ async function syncRaceRoom() {
 // ═══════════════════════════════════════
 class MusicEngine {
   constructor() {
-    this.enabled = true;
+    // 默认静音：只有玩家自己点开才出声，手机和电脑一致
+    this.enabled = localStorage.getItem("racerAudioEnabled") === "1";
     this.bgmAudio = null;
     this.crashAudio = null;
     this.coinAudio = null;
@@ -228,7 +528,7 @@ class MusicEngine {
         const playPromise = this.bgmAudio.play();
         if (playPromise !== undefined) {
           playPromise.then(() => {
-            if (audioToggle) audioToggle.textContent = "🔊 音乐播放中";
+            if (soundStatus) soundStatus.textContent = "🔊 音乐播放中";
           }).catch(e => {
             console.log("HTML5 Audio wait for gesture:", e);
           });
@@ -395,6 +695,7 @@ class MusicEngine {
 
   toggle() {
     this.enabled = !this.enabled;
+    localStorage.setItem("racerAudioEnabled", this.enabled ? "1" : "0");
     if (this.bgmAudio) {
       if (this.enabled && running) {
         this.bgmAudio.play().catch(() => {});
@@ -413,6 +714,23 @@ class MusicEngine {
 }
 
 const sound = new MusicEngine();
+
+// 静音/开启状态同步到界面（默认静音，点右上角喇叭才出声）
+function syncAudioUI() {
+  const on = sound.enabled;
+  if (audioToggle) {
+    audioToggle.textContent = on ? "🔊" : "🔇";
+    audioToggle.style.opacity = on ? "1" : "0.55";
+    audioToggle.title = on ? "关闭音乐音效" : "开启音乐音效（默认静音）";
+  }
+  if (soundStatus) {
+    soundStatus.textContent = on ? "🔊 音效已开启" : "🔇 默认静音，点右上角喇叭开启";
+  }
+}
+if (audioToggle) {
+  audioToggle.textContent = sound.enabled ? "🔊" : "🔇";
+  audioToggle.style.opacity = sound.enabled ? "1" : "0.55";
+}
 
 // 手机强力马达震动 (兼容全平台手机)
 function triggerHaptic(durationOrPattern = 200) {
@@ -435,13 +753,18 @@ function triggerHaptic(durationOrPattern = 200) {
 // ═══════════════════════════════════════
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+const isMobileDevice = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobileDevice, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobileDevice ? 1.5 : 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.25;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !isMobileDevice;   // 手机端关阴影，帧率优先
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// 菜单阶段也把镜头放在车后视角，避免开局前对着地面
+camera.position.set(0, 3.5, 6);
+camera.lookAt(0, 1.1, -16);
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
 scene.add(ambientLight);
@@ -472,8 +795,36 @@ const ROAD_SEGMENT_LENGTH = 24;
 const ROAD_SEGMENTS = 24;
 const TOTAL_ROAD_LEN = ROAD_SEGMENT_LENGTH * ROAD_SEGMENTS;
 
+// 赛道走向：按完赛里程归一化，组成"直道 → 右弯 → 回正 → U 型大弯 → 直道"
 function trackCurve(distance) {
-  return 7 * Math.sin(distance / 190) + 3.5 * Math.sin(distance / 82);
+  const total = Math.max(300, finishDistance || 1500);
+  const t = Math.max(0, Math.min(1, distance / total));
+  // 关键节点：位置(0..1) → 横向偏移(米)
+  const keys = [
+    [0.00, 0],
+    [0.16, 0],
+    [0.32, 34],     // 右弯
+    [0.44, 34],
+    [0.50, 18],
+    [0.62, -34],    // U 型大弯（从左绕到右）
+    [0.72, -34],
+    [0.86, 0],      // 回正
+    [1.00, 0]
+  ];
+  let value = 0;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const [t0, v0] = keys[i];
+    const [t1, v1] = keys[i + 1];
+    if (t >= t0 && t <= t1) {
+      const k = (t - t0) / Math.max(1e-6, t1 - t0);
+      const smooth = k * k * (3 - 2 * k);   // 平滑插值，进出弯都不突兀
+      value = v0 + (v1 - v0) * smooth;
+      break;
+    }
+    if (t > t1) value = v1;
+  }
+  // 叠加细碎摆动，让直道也不是死板的一条线
+  return value + 2.4 * Math.sin(distance / 57) + 1.2 * Math.sin(distance / 23);
 }
 
 const worldGroup = new THREE.Group();
@@ -758,8 +1109,31 @@ function createPalm() {
 // 绝无 F1 大尾翼风刀，圆润流线全景天幕
 // 并且严格以后轴中心为旋转枢轴 (零后轴漂移)
 // ═══════════════════════════════════════
+// 对手车顶名字牌（联机时用来确认对方在线）
+function makeNameTag(text) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 72;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, 256, 72);
+  ctx.font = "bold 36px 'Rajdhani','Orbitron',sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(6,18,31,.9)";
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = "#61efff";
+  ctx.fillText(String(text || "对手").slice(0, 10), 128, 38);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+  sprite.scale.set(4.4, 1.24, 1);
+  sprite.position.set(0, 2.6, -1.2);
+  return sprite;
+}
+
 function createTeslaCar(isPlayer = true, colorHex = 0xffffff) {
   const carGroup = new THREE.Group();
+  carGroup.userData.paintMaterial = null;   // 后面按服务器分配的颜色改车漆
 
   // 高级纯电烤漆车漆
   const paintMat = new THREE.MeshStandardMaterial({
@@ -767,6 +1141,7 @@ function createTeslaCar(isPlayer = true, colorHex = 0xffffff) {
     roughness: 0.25,
     metalness: 0.7
   });
+  carGroup.userData.paintMaterial = paintMat;
 
   // 特斯拉全景黑水晶天幕玻璃
   const glassMat = new THREE.MeshStandardMaterial({
@@ -1200,7 +1575,8 @@ function resetGame() {
   player.wheels[0].steer.rotation.set(0, 0, 0);
   player.wheels[1].steer.rotation.set(0, 0, 0);
 
-  scoreEl.textContent = "0";
+  raceTime = 0;
+  scoreEl.textContent = formatRaceTime(0);
   nitroBar.style.width = "100%";
 
   // 开局立即在前方车道生成 6 辆巡航车流，绝不让道路空旷！
@@ -1219,6 +1595,13 @@ function resetGame() {
 }
 
 function startGame() {
+  // 联机中：两人没到齐就不许先跑，必须一起发车
+  if (roomCode && !raceSync.armed) {
+    document.querySelector("#roomStatus").textContent = "等对手进入同一个房间号后，两人一起发车";
+    return;
+  }
+  // 联机倒计时未结束前，手动开始无效，等统一发车
+  if (roomCode && raceSync.armed && Date.now() < raceSync.startAt) return;
   sound.ensureContext();
   running = true;
   overlay.classList.add("hidden");
@@ -1228,7 +1611,7 @@ function startGame() {
   resetGame();
 
   sound.startBGM();
-  if (soundStatus) soundStatus.textContent = "🔊 引擎、音乐、碰撞音效已开启";
+  if (soundStatus) soundStatus.textContent = sound.enabled ? "🔊 引擎、音乐、碰撞音效已开启" : "🔇 默认静音，点右上角喇叭开启";
   triggerHaptic(40);
 }
 
@@ -1237,7 +1620,36 @@ function finishRace() {
   running = false;
   sound.stopBGM();
   title.textContent = "冲过终点！";
-  message.innerHTML = `完成 ${Math.floor(finishDistance / 100) / 10} km 卡丁车赛道！<br>最终成绩：<b style="color:#61efff;font-size:24px">${Math.floor(score)}</b>`;
+  if (!bestTime || raceTime < bestTime) {
+    bestTime = raceTime;
+    localStorage.setItem("racerBestTime", String(bestTime));
+  }
+  bestEl.textContent = formatRaceTime(bestTime);
+
+  // 用时少的赢：拿对手的冲线用时对比
+  const other = raceSync.other;
+  let verdict = roomCode ? "等待对手冲线…" : "";
+  if (other && other.finishTime) {
+    verdict = raceTime <= other.finishTime
+      ? `🏆 你赢了！比对手快 ${(other.finishTime - raceTime).toFixed(1)} 秒`
+      : `对手更快，你慢了 ${(raceTime - other.finishTime).toFixed(1)} 秒`;
+  }
+  message.innerHTML =
+    `完成 ${Math.floor(finishDistance / 100) / 10} km 赛道！<br>` +
+    `用时：<b style="color:#61efff;font-size:24px">${formatRaceTime(raceTime)}</b><br>` +
+    (verdict ? `${verdict}<br>` : "") +
+    `最佳：${formatRaceTime(bestTime)}`;
+
+  // 把用时同步上去（成绩榜 + 房间状态）
+  saveLocalScore(playerName, raceTime);
+  loadLeaderboard();
+  if (roomCode && roomPlayerId) {
+    api.post("/api/race/state", {
+      roomCode, playerId: roomPlayerId, x: carPhysics.x,
+      heading: carPhysics.heading, speed: 0, distance: raceDistance,
+      finished: true, time: raceTime
+    }).catch(() => {});
+  }
   document.querySelector("#start").textContent = "再跑一圈";
   overlay.classList.remove("hidden");
 }
@@ -1249,7 +1661,7 @@ async function endGame() {
   const finalScore = Math.floor(score);
   best = Math.max(best, finalScore);
   localStorage.setItem("neonRushBest", best);
-  bestEl.textContent = best;
+  bestEl.textContent = formatRaceTime(bestTime);
   title.textContent = "旅程结束";
   message.innerHTML = `本次安全行驶得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>避开车流，再挑战一次吧。`;
   document.querySelector("#start").textContent = "重新启程";
@@ -1267,7 +1679,7 @@ async function endGame() {
   createSpark(player.group.position.x, 0.6, player.group.position.z - 2.5, 0xffaa00, 35);
 
   try {
-    await api.post("/api/scores", { name: playerName, score: finalScore });
+    await api.post("/api/scores", { name: playerName, time: raceTime });
     await loadLeaderboard();
   } catch (error) {
     setServerState(false);
@@ -1275,10 +1687,117 @@ async function endGame() {
 }
 
 // ═══════════════════════════════════════
+// 比赛小地图：整条赛道 + 双方实时位置
+// ═══════════════════════════════════════
+const minimapCanvas = document.querySelector("#minimap");
+let minimapCtx = null;
+let minimapFrame = 0;
+
+function layoutMinimap() {
+  const el = document.querySelector("#minimap");
+  if (!el) return;
+  const mobile = window.matchMedia("(max-width: 820px)").matches;
+  el.style.width = mobile ? "88px" : "116px";
+  el.style.height = mobile ? "152px" : "196px";
+  el.style.left = mobile ? "10px" : "20px";
+  el.style.top = mobile ? "148px" : "432px";
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = el.clientWidth || 100;
+  const h = el.clientHeight || 170;
+  el.width = Math.round(w * dpr);
+  el.height = Math.round(h * dpr);
+  minimapCtx = el.getContext("2d");
+  if (minimapCtx) minimapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawMinimap();
+}
+
+function drawMinimap() {
+  const el = minimapCanvas;
+  if (!el || !minimapCtx) return;
+  const w = el.clientWidth;
+  const h = el.clientHeight;
+  if (!w || !h) return;
+  const ctx = minimapCtx;
+  ctx.clearRect(0, 0, w, h);
+
+  const pad = 9;
+  const usableH = h - pad * 2;
+  const usableW = w - pad * 2;
+  const total = Math.max(300, finishDistance);
+
+  // 采样整条赛道的弯曲，用于横向缩放
+  const samples = 70;
+  let maxAbs = 1;
+  const pts = [];
+  for (let i = 0; i <= samples; i++) {
+    const d = (total * i) / samples;
+    const cx = trackCurve(d);
+    if (Math.abs(cx) > maxAbs) maxAbs = Math.abs(cx);
+    pts.push({ d, cx });
+  }
+  const xScale = ((usableW / 2) / maxAbs) * 0.86;
+  const toX = (cx) => w / 2 + cx * xScale;
+  const toY = (d) => h - pad - (Math.max(0, Math.min(d, total)) / total) * usableH;
+
+  // 赛道主体
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(97,239,255,.22)";
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    const x = toX(p.cx), y = toY(p.d);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(151,255,255,.65)";
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  // 起点 / 终点
+  const startPt = pts[0];
+  const endPt = pts[pts.length - 1];
+  ctx.fillStyle = "rgba(255,255,255,.55)";
+  ctx.beginPath();
+  ctx.arc(toX(startPt.cx), toY(0), 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffd166";
+  ctx.fillRect(toX(endPt.cx) - 7, toY(total) - 2, 14, 3);
+
+  // 对手（银色，带位置外推）
+  const other = raceSync.other;
+  if (other) {
+    const elapsed = Math.max(0, Math.min(0.25, (Date.now() - other.at) / 1000));
+    const od = other.distance + (other.speed * 90 / 3.6) * elapsed;
+    ctx.fillStyle = "#c8ccd2";
+    ctx.beginPath();
+    ctx.arc(toX(trackCurve(od)), toY(od), 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 自己（白色）
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(toX(trackCurve(raceDistance)), toY(raceDistance), 4.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(0,0,0,.45)";
+  ctx.stroke();
+}
+
+// ═══════════════════════════════════════
 // 核心动力学更新循环 (纯正后轴阿克曼前轮转向)
 // ═══════════════════════════════════════
 function update() {
   if (!running) return;
+  if (raceSync.locked) {
+    // 兜底：倒计时卡住超过 6 秒就强制解锁，绝不把玩家冻在原地
+    if (!raceSync.lockGuardAt) raceSync.lockGuardAt = Date.now();
+    if (Date.now() - raceSync.lockGuardAt < 6000) return;
+    raceSync.locked = false;
+  }
+  raceSync.lockGuardAt = 0;
   frame++;
 
   // 1. 速度与加速
@@ -1293,15 +1812,19 @@ function update() {
   nitro = boosting ? Math.max(0, nitro - 0.7) : Math.min(100, nitro + 0.12);
 
   // 手机与电脑默认同速；键盘油门只略微提速，避免平台间速度差异过大。
+  // 时速上限固定 200 km/h（currentSpeed 单位换算：×90 即 km/h）
   const braking = brakeHeld || keys.brake || keys.KeyS || keys.ArrowDown;
+  const MAX_SPEED = 200 / 90;
   if (braking) {
-    baseSpeed = Math.max(0, baseSpeed - 0.045);
+    baseSpeed = Math.max(0, baseSpeed - 0.05);
   } else if (accelerating || throttleHeld) {
-    baseSpeed = Math.min(200 / 90, baseSpeed + 0.012);
+    baseSpeed = Math.min(MAX_SPEED, baseSpeed + 0.012);
   } else {
-    baseSpeed = Math.max(0, baseSpeed - 0.006);
+    // 松开油门约 1 秒内停住，绝不会自己往前溜
+    baseSpeed = Math.max(0, baseSpeed - 0.02);
+    if (baseSpeed < 0.02) baseSpeed = 0;
   }
-  currentSpeed = Math.min(200 / 90, baseSpeed + (boosting ? 0.35 : 0));
+  currentSpeed = Math.min(MAX_SPEED, baseSpeed + (boosting ? 0.35 : 0));
   raceDistance += (currentSpeed * 90) / 3.6 / 60;
   const progress = Math.min(1, raceDistance / finishDistance);
   finishGate.position.set(trackCurve(finishDistance), 0, -(finishDistance - raceDistance));
@@ -1315,8 +1838,9 @@ function update() {
   }
 
   score += currentSpeed * 0.45;
+  raceTime += 1 / 60;
   nitroBar.style.width = `${nitro}%`;
-  scoreEl.textContent = Math.floor(score);
+  scoreEl.textContent = formatRaceTime(raceTime);
   speedEl.textContent = Math.floor(currentSpeed * 90);
 
   sound.updateEngine(currentSpeed, boosting);
@@ -1458,8 +1982,28 @@ function update() {
     const dz = Math.abs((pPos.z - 1.3) - (ePos.z - 1.3));
 
     if (dx < 1.85 && dz < 4.2) {
-      showImpact("车辆正面碰撞", ePos.x, ePos.z, true);
-      return endGame();
+      // 实体碰撞：双方弹开 + 掉速，比赛继续，不判出局
+      if (Date.now() > (enemy.hitUntil || 0)) {
+        enemy.hitUntil = Date.now() + 600;
+        const push = Math.sign(pPos.x - ePos.x) || (Math.random() < 0.5 ? -1 : 1);
+        const bound = ROAD_WIDTH / 2 - 1.8;
+
+        // 自己的车被顶开，速度掉到三成，车头甩一下
+        carPhysics.x = Math.max(-bound, Math.min(bound, carPhysics.x + push * 1.6));
+        carPhysics.heading += push * 0.16;
+        baseSpeed = Math.max(0, baseSpeed * 0.32);
+
+        // 对方车也被撞歪，往反方向挪一条缝并减速
+        enemy.laneX = Math.max(-ROAD_WIDTH / 2 + 1.2, Math.min(ROAD_WIDTH / 2 - 1.2, enemy.laneX - push * 2.4));
+        enemy.group.position.z += 2.5;
+        enemy.speed = Math.max(0.06, enemy.speed * 0.55);
+        enemy.group.rotation.y += push * 0.25;
+
+        showImpact("剐蹭 · 撞开减速", ePos.x, ePos.z, true);
+        sound.playCrash();
+        triggerHaptic([50, 30, 70]);
+        cameraTrauma = Math.min(1, cameraTrauma + 0.5);
+      }
     }
 
     if (enemy.group.position.z > 25) {
@@ -1506,12 +2050,15 @@ function update() {
     }
   }
 
-  // 8. 第三人称跟随相机 (贴近真实自驾后视角)
-  const targetCamX = (carPhysics.x + trackCurve(raceDistance)) * 0.72;
+  // 8. 第三人称跟随相机：镜头始终锁在车辆正后方，不再被弯道/横向漂移带偏
+  syncRemoteCarVisual();
+  if (frame % 4 === 0) drawMinimap();
+  const carWorldX = carPhysics.x + trackCurve(raceDistance);
+  const targetCamX = carWorldX;
   const targetCamY = boosting ? 3.3 : 3.5;
   const targetCamZ = boosting ? 6.5 : 6.0; // 紧贴车尾
 
-  camera.position.x += (targetCamX - camera.position.x) * 0.12;
+  camera.position.x += (targetCamX - camera.position.x) * 0.35;
   camera.position.y += (targetCamY - camera.position.y) * 0.1;
   camera.position.z += (targetCamZ - camera.position.z) * 0.1;
 
@@ -1526,7 +2073,8 @@ function update() {
   camera.fov += (targetFov - camera.fov) * 0.08;
   camera.updateProjectionMatrix();
 
-  camera.lookAt(carPhysics.x * 0.45, 1.1, -16);
+  // 视线永远沿赛道正前方，镜头和车一起平移，不会越开越歪
+  camera.lookAt(carWorldX, 1.1, -16);
 }
 
 // ═══════════════════════════════════════
@@ -1562,9 +2110,13 @@ function renderLeaderboard(scores) {
     leaderboardList.innerHTML = "<li>暂无纪录，等你来创奇迹！</li>";
     return;
   }
-  leaderboardList.innerHTML = scores.map((item, index) => (
-    `<li><strong>${index + 1}. ${escapeHtml(item.name)}</strong><span>${item.score}</span></li>`
-  )).join("");
+  // 自己的名字在榜上用黄色标出来，方便一眼找到
+  const myName = (playerNameInput?.value.trim() || playerName || localStorage.getItem("neonRacerName") || "").toLowerCase();
+  leaderboardList.innerHTML = scores.map((item, index) => {
+    const mine = myName && String(item.name || "").trim().toLowerCase() === myName;
+    const mark = mine ? ' style="color:#ffd166;text-shadow:0 0 10px rgba(255,209,102,.6)"' : "";
+    return `<li><strong${mark}>${index + 1}. ${escapeHtml(item.name)}</strong><span${mark}>${formatRaceTime(Number(item.time))}</span></li>`;
+  }).join("");
 }
 
 function escapeHtml(value) {
@@ -1577,15 +2129,27 @@ function escapeHtml(value) {
   }[char]));
 }
 
-async function loadLeaderboard() {
+function readLocalScores() {
   try {
-    const data = await api.get("/api/scores");
-    setServerState(true);
-    renderLeaderboard(data.scores || []);
+    const data = JSON.parse(localStorage.getItem("racerLocalScores") || "[]");
+    return Array.isArray(data) ? data : [];
   } catch (error) {
-    setServerState(false);
-    leaderboardList.innerHTML = "<li>服务器未连接，当前记录本机分数。</li>";
+    return [];
   }
+}
+
+function saveLocalScore(name, time) {
+  const list = readLocalScores();
+  const key = String(name || "车手").trim().toLowerCase();
+  const kept = list.filter(item => String(item.name || "").trim().toLowerCase() !== key);
+  kept.push({ name: name || "车手", time: Math.round(time * 10) / 10, createdAt: new Date().toISOString() });
+  kept.sort((a, b) => Number(a.time) - Number(b.time));
+  localStorage.setItem("racerLocalScores", JSON.stringify(kept.slice(0, 20)));
+}
+
+function loadLeaderboard() {
+  renderLeaderboard(readLocalScores());
+  setServerState(false);
 }
 
 // ═══════════════════════════════════════
@@ -1753,10 +2317,8 @@ if (quickSceneSelect) {
 if (audioToggle) {
   audioToggle.addEventListener("click", () => {
     unlockAudioAndHaptics();
-    const isEnabled = sound.toggle();
-    audioToggle.textContent = isEnabled ? "🔊" : "🔇";
-    audioToggle.style.opacity = isEnabled ? "1" : "0.5";
-    if (soundStatus) soundStatus.textContent = isEnabled ? "🔊 音效已开启" : "🔇 音效已关闭";
+    sound.toggle();
+    syncAudioUI();
   });
 }
 
@@ -1779,12 +2341,15 @@ bindPedal("#throttle", "throttle");
 bindPedal("#brake", "brake");
 
 document.querySelector("#createRoom")?.addEventListener("click", async () => {
-  try { await connectRaceRoom("create"); }
+  try { await enterRaceRoom(document.querySelector("#roomCodeInput")?.value); }
   catch (error) { document.querySelector("#roomStatus").textContent = error.message; }
 });
 document.querySelector("#joinRoom")?.addEventListener("click", async () => {
-  try { await connectRaceRoom("join", document.querySelector("#roomCodeInput").value); }
+  try { await enterRaceRoom(document.querySelector("#roomCodeInput")?.value); }
   catch (error) { document.querySelector("#roomStatus").textContent = error.message; }
+});
+document.querySelector("#leaveRoom")?.addEventListener("click", () => {
+  leaveRaceRoom(false).catch(() => {});
 });
 
 // 开始按钮绑定：同时支持 touchend 与 click (针对苹果 Safari 零延迟手势)
@@ -1804,8 +2369,14 @@ startBtn.addEventListener("click", onStartTap);
 const testAudioBtn = document.querySelector("#testAudioBtn");
 if (testAudioBtn) {
   testAudioBtn.addEventListener("click", () => {
+    // 试听按钮等价于"我要开声音"
+    if (!sound.enabled) {
+      sound.enabled = true;
+      localStorage.setItem("racerAudioEnabled", "1");
+    }
     sound.ensureContext();
     sound.startBGM();
+    syncAudioUI();
     testAudioBtn.textContent = "🎵 音乐正在播放中！(若无声请关闭iPhone左侧实体静音键)";
     testAudioBtn.style.background = "rgba(40,230,120,0.25)";
     testAudioBtn.style.borderColor = "#28e678";
@@ -1817,5 +2388,8 @@ refreshRanks.addEventListener("click", loadLeaderboard);
 
 // 初始化
 applyTheme(currentTheme);
+syncAudioUI();
+layoutMinimap();
+window.addEventListener("resize", () => layoutMinimap());
 loadLeaderboard();
 render();

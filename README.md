@@ -1,19 +1,45 @@
-# PlayCarGame（霓虹赛车 · 双人联机）
+# 离线版 · 3D 公路自驾（单机自己刷成绩）
 
-前端与后端同机部署：`https://game.yhj123.dpdns.org` 由阿里云 nginx 反向代理到本机 Node（127.0.0.1:3210），
-页面与 `/api/*` 同源，不再依赖 GitHub Pages。
+纯单机版本：不连服务器、没有联机房间、没有排行榜接口。跑完一局把用时记在本机浏览器里，自己刷新纪录。
 
-- 架构 / 改代码说明：[docs/FRAMEWORK.md](docs/FRAMEWORK.md)
-- 服务器首次初始化：`bash /opt/playcargame/deploy/bootstrap.sh`
-- 日常发布：`pwsh -File scripts/deploy-remote.ps1 -Message "改了什么"`
-- 健康检查：`curl https://game.yhj123.dpdns.org/api/health`
+打开 `index.html` 就能玩（也可以用任意静态服务器托管，例如 GitHub Pages）。
 
-## 本地目录
+## 文件说明
 
-```
-index.html  game.js  style.css  assets/    前端
-server.js                                    Node 服务（静态 + API）
-deploy/                                      nginx / systemd / 部署脚本
-scripts/                                     Windows 端发布脚本
-data/                                        运行时数据（不进 git）
-```
+| 文件 / 目录 | 作用 |
+| --- | --- |
+| `index.html` | 页面骨架：3D 画布、HUD（车速 / 比赛用时 / 最佳用时）、车王排行榜（本机成绩）、控制按钮、小地图画布、音乐开关 |
+| `game.js` | 游戏主逻辑：Three.js 场景与赛道（含 U 型弯）、车辆物理、AI 车流、实体碰撞、计时与冲线判定、小地图绘制、音效引擎。离线模式下所有网络请求被禁用 |
+| `style.css` | 全部界面样式（含移动端适配） |
+| `assets/three.min.js` | 本地 Three.js 引擎，不依赖 CDN |
+| `assets/bgm.wav` | 背景音乐（**默认静音**，点右上角喇叭才播放） |
+| `assets/crash.wav` | 撞击音效 |
+| `assets/coin.wav` | 金币音效 |
+| `README.md` | 本说明 |
+| `.gitignore` | 忽略规则 |
+
+## 玩法
+
+1. 选赛道主题、填车手昵称、选控制方式（按键 / 手机倾斜）、选比赛距离
+2. 点「启动出发」
+3. 踩油门才走，松手约 1 秒停住，时速上限 200 km/h
+4. 撞到 AI 车是「弹开 + 减速」，不会出局
+5. 冲过终点后显示本局用时，并和本机最佳用时对比
+6. 排行榜读的是本机保存的成绩，用时越短越靠前
+
+## 音效
+
+默认静音，不会一进页面就响。点右上角 `🔇` 按钮开启音乐和音效，选择会记在本机。
+
+iPhone 若开了侧边实体静音键，网页音效会被系统强制静音，需要拨回去。
+
+## 本地成绩存放
+
+浏览器 `localStorage`：
+
+- `racerLocalScores`：成绩列表（名字 + 用时）
+- `racerBestTime`：个人最佳用时
+- `neonRacerName`：上次使用的昵称
+- `racerAudioEnabled`：音乐开关状态
+
+清空浏览器站点数据即可重置成绩。

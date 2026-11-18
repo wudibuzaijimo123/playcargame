@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="style.css?v=38">
 </head>
 <body>
   <!-- 3D WebGL Canvas 容器 -->
@@ -24,7 +24,7 @@
     <!-- 顶栏快速切场景按钮与音效开关 -->
     <div class="topbar-actions">
       <button id="tiltToggle" class="icon-btn tilt-btn" title="开启手机倾斜转向" type="button">📱</button>
-      <button id="audioToggle" class="icon-btn" title="音乐音效开关" type="button">🔊</button>
+      <button id="audioToggle" class="icon-btn" title="开启音乐音效（默认静音）" type="button">🔇</button>
       <div class="quick-scene-select">
         <select id="quickSceneSelect" aria-label="切换场景">
           <option value="country">🌾 乡间小路</option>
@@ -40,18 +40,22 @@
     </div>
   </header>
 
+  <div id="roomBadge" style="position:fixed;right:16px;top:70px;z-index:45;display:none;padding:6px 13px;border-radius:999px;background:rgba(10,20,34,.78);border:1px solid rgba(97,239,255,.45);color:#61efff;font:700 14px/1 'Rajdhani',sans-serif;letter-spacing:.08em;backdrop-filter:blur(6px);"></div>
+
+  <canvas id="minimap" style="position:fixed;z-index:12;border-radius:12px;background:rgba(8,16,28,.58);border:1px solid rgba(97,239,255,.25);pointer-events:none;"></canvas>
+
   <section class="hud">
     <div class="metric">
       <strong id="speed">0</strong>
       <span>KM/H 速度</span>
     </div>
     <div class="metric">
-      <strong id="score">0</strong>
-      <span>探索得分</span>
+      <strong id="score">0:00.0</strong>
+      <span>比赛用时</span>
     </div>
     <div class="metric">
-      <strong id="best">0</strong>
-      <span>最高纪录</span>
+      <strong id="best">--</strong>
+      <span>最佳用时</span>
     </div>
     <div class="race-progress"><div id="raceProgressBar"></div><span id="raceProgressText">0 / 1500 m</span></div>
   </section>
@@ -75,7 +79,7 @@
     <span id="impactValue">小心碰撞</span>
   </div>
 
-  <div class="sound-status" id="soundStatus">🔊 音效已开启</div>
+  <div class="sound-status" id="soundStatus">🔇 默认静音，点右上角喇叭开启</div>
 
   <div class="controls">
     <div class="steering-mode" role="group" aria-label="选择转向方式">
@@ -138,9 +142,7 @@
         <select id="raceLength"><option value="1500">短程 1.5 km</option><option value="3000">标准 3 km</option></select>
       </label>
       <div class="room-controls">
-        <button id="createRoom" type="button">创建联机房间</button>
-        <div><input id="roomCodeInput" maxlength="6" placeholder="输入朋友的房间码"><button id="joinRoom" type="button">加入</button></div>
-        <div id="roomStatus">单人比赛</div>
+        <div id="roomStatus" style="display:none">单人比赛</div>
       </div>
       <!-- 苹果 iOS Safari 提示与试听测试 -->
       <div style="background:rgba(255,180,0,0.12);border:1px solid rgba(255,200,0,0.35);border-radius:10px;padding:8px 12px;margin:8px 0 12px;font-size:11px;color:#ffeaa7;line-height:1.5;text-align:left;">
@@ -165,6 +167,6 @@
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=21"></script>
+  <script src="game.js?v=offline-1"></script>
 </body>
 </html>
