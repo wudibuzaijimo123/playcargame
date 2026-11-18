@@ -141,6 +141,17 @@
       <label class="race-length-field">比赛距离
         <select id="raceLength"><option value="1500">短程 1.5 km</option><option value="3000">标准 3 km</option></select>
       </label>
+      <div class="keymap-settings">
+        <div class="keymap-title">快捷键（点按钮后按下你要用的键）</div>
+        <div class="keymap-row">
+          <button id="key-throttle" type="button">W</button><span>油门</span>
+          <button id="key-brake" type="button">S</button><span>刹车</span>
+          <button id="key-boost" type="button">Shift</button><span>加速</span>
+          <button id="key-left" type="button">←</button><span>左转</span>
+          <button id="key-right" type="button">→</button><span>右转</span>
+          <button id="key-reset" type="button">恢复默认</button>
+        </div>
+      </div>
       <div class="room-controls" style="display:none">
         <div id="roomStatus" style="display:none">单人比赛</div>
       </div>
@@ -167,6 +178,6 @@
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=offline-1"></script>
+  <script src="game.js?v=offline-2"></script>
 </body>
 </html>

@@ -53,6 +53,49 @@ let tiltCenter = null;
 let steeringMode = "buttons";
 const keys = {};
 
+// ── 可自定义快捷键（默认：W 油门 / S 刹车 / Shift 加速 / ←→ 转向）──
+const KEYMAP_STORAGE = "racerKeymap";
+const DEFAULT_KEYMAP = {
+  throttle: "KeyW",
+  brake: "KeyS",
+  boost: "ShiftLeft",
+  left: "ArrowLeft",
+  right: "ArrowRight"
+};
+const KEY_LABELS = {
+  KeyW: "W", KeyA: "A", KeyS: "S", KeyD: "D", KeyQ: "Q", KeyE: "E",
+  Space: "空格", ShiftLeft: "左 Shift", ShiftRight: "右 Shift",
+  ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓",
+  KeyJ: "J", KeyK: "K", KeyL: "L", KeyU: "U", KeyI: "I", KeyO: "O",
+  Digit1: "1", Digit2: "2", Digit3: "3", Enter: "回车", Tab: "Tab"
+};
+let keymap = Object.assign({}, DEFAULT_KEYMAP);
+try {
+  Object.assign(keymap, JSON.parse(localStorage.getItem(KEYMAP_STORAGE) || "{}"));
+} catch (error) { /* 忽略损坏的配置 */ }
+let capturingKey = null;
+
+function keyLabel(code) {
+  return KEY_LABELS[code] || String(code || "").replace("Key", "");
+}
+
+function saveKeymap() {
+  localStorage.setItem(KEYMAP_STORAGE, JSON.stringify(keymap));
+}
+
+function renderKeymapButtons() {
+  ["throttle", "brake", "boost", "left", "right"].forEach(action => {
+    const btn = document.querySelector(`#key-${action}`);
+    if (btn && capturingKey !== action) btn.textContent = keyLabel(keymap[action]);
+  });
+}
+
+function startKeyCapture(action) {
+  capturingKey = action;
+  const btn = document.querySelector(`#key-${action}`);
+  if (btn) btn.textContent = "按新键…";
+}
+
 let best = Number(localStorage.getItem("neonRushBest") || 0);
 let bestTime = Number(localStorage.getItem("racerBestTime") || 0);   // 秒，0 表示还没跑过
 
@@ -803,11 +846,11 @@ function trackCurve(distance) {
   const keys = [
     [0.00, 0],
     [0.16, 0],
-    [0.32, 34],     // 右弯
-    [0.44, 34],
-    [0.50, 18],
-    [0.62, -34],    // U 型大弯（从左绕到右）
-    [0.72, -34],
+    [0.32, 20],     // 右弯
+    [0.44, 20],
+    [0.50, 11],
+    [0.62, -20],    // U 型大弯（从左绕到右）
+    [0.72, -20],
     [0.86, 0],      // 回正
     [1.00, 0]
   ];
@@ -1801,8 +1844,8 @@ function update() {
   frame++;
 
   // 1. 速度与加速
-  const accelerating = keys.KeyW || keys.ArrowUp || keys.throttle;
-  const wantsBoost = (keys.Space || keys.boost) && nitro > 0;
+  const accelerating = keys[keymap.throttle] || keys.ArrowUp || keys.throttle;
+  const wantsBoost = (keys[keymap.boost] || keys.ShiftLeft || keys.ShiftRight || keys.boost) && nitro > 0;
 
   if (wantsBoost && !boosting) {
     sound.playBoost();
@@ -1813,7 +1856,7 @@ function update() {
 
   // 手机与电脑默认同速；键盘油门只略微提速，避免平台间速度差异过大。
   // 时速上限固定 200 km/h（currentSpeed 单位换算：×90 即 km/h）
-  const braking = brakeHeld || keys.brake || keys.KeyS || keys.ArrowDown;
+  const braking = brakeHeld || keys.brake || keys[keymap.brake] || keys.ArrowDown;
   const MAX_SPEED = 200 / 90;
   if (braking) {
     baseSpeed = Math.max(0, baseSpeed - 0.05);
@@ -1846,8 +1889,8 @@ function update() {
   sound.updateEngine(currentSpeed, boosting);
 
   // 2. 真实汽车物理转向 (后轴旋转中心，零漂移！)
-  const turnLeft = steeringMode === "buttons" && (keys.ArrowLeft || keys.KeyA || keys.left);
-  const turnRight = steeringMode === "buttons" && (keys.ArrowRight || keys.KeyD || keys.right);
+  const turnLeft = steeringMode === "buttons" && (keys[keymap.left] || keys.ArrowLeft || keys.KeyA || keys.left);
+  const turnRight = steeringMode === "buttons" && (keys[keymap.right] || keys.ArrowRight || keys.KeyD || keys.right);
 
   const dt = 1 / 60;
 
@@ -2058,7 +2101,7 @@ function update() {
   const targetCamY = boosting ? 3.3 : 3.5;
   const targetCamZ = boosting ? 6.5 : 6.0; // 紧贴车尾
 
-  camera.position.x += (targetCamX - camera.position.x) * 0.35;
+  camera.position.x += (targetCamX - camera.position.x) * 0.16;
   camera.position.y += (targetCamY - camera.position.y) * 0.1;
   camera.position.z += (targetCamZ - camera.position.z) * 0.1;
 
@@ -2069,12 +2112,12 @@ function update() {
     cameraTrauma = Math.max(0, cameraTrauma - 0.04);
   }
 
-  const targetFov = boosting ? 68 : 58;
-  camera.fov += (targetFov - camera.fov) * 0.08;
+  const targetFov = boosting ? 62 : 58;
+  camera.fov += (targetFov - camera.fov) * 0.02;
   camera.updateProjectionMatrix();
 
   // 视线永远沿赛道正前方，镜头和车一起平移，不会越开越歪
-  camera.lookAt(carWorldX, 1.1, -16);
+  camera.lookAt(camera.position.x, 1.1, -16);
 }
 
 // ═══════════════════════════════════════
@@ -2284,6 +2327,14 @@ function bindButton(selector, key) {
 
 window.addEventListener("keydown", event => {
   unlockAudioAndHaptics();
+  if (capturingKey) {
+    event.preventDefault();
+    keymap[capturingKey] = event.code;
+    saveKeymap();
+    capturingKey = null;
+    renderKeymapButtons();
+    return;
+  }
   keys[event.code] = true;
   if (["ArrowLeft", "ArrowRight", "ArrowUp", "Space"].includes(event.code)) {
     event.preventDefault();
@@ -2385,6 +2436,18 @@ if (testAudioBtn) {
 }
 
 refreshRanks.addEventListener("click", loadLeaderboard);
+
+// 快捷键：点按钮录制新键，或者一键恢复默认
+["throttle", "brake", "boost", "left", "right"].forEach(action => {
+  const btn = document.querySelector(`#key-${action}`);
+  if (btn) btn.addEventListener("click", () => startKeyCapture(action));
+});
+document.querySelector("#key-reset")?.addEventListener("click", () => {
+  keymap = Object.assign({}, DEFAULT_KEYMAP);
+  saveKeymap();
+  renderKeymapButtons();
+});
+renderKeymapButtons();
 
 // 初始化
 applyTheme(currentTheme);
