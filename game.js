@@ -421,6 +421,32 @@ function refreshGapHud() {
   setRoomBadge(roomCode, false, badgeText);
 }
 
+// 对手在视野外时，用屏幕提示标出他在前还是在后、差多少米
+let lastRivalText = "";
+function updateRivalMarker(rel) {
+  const el = document.querySelector("#rivalMarker");
+  if (!el) return;
+  if (!raceSync.other) {
+    if (lastRivalText !== "") { el.style.display = "none"; lastRivalText = ""; }
+    return;
+  }
+  if (Math.abs(rel) < 55) {
+    if (lastRivalText !== "") { el.style.display = "none"; lastRivalText = ""; }
+    return;
+  }
+  const ahead = rel > 0;
+  const text = ahead ? `▲ 对手领先 ${Math.round(rel)} m` : `▼ 对手落后 ${Math.round(-rel)} m`;
+  if (text !== lastRivalText) {
+    lastRivalText = text;
+    el.textContent = text;
+    el.style.color = ahead ? "#ff9a3c" : "#61efff";
+    el.style.borderColor = ahead ? "rgba(255,154,60,.55)" : "rgba(97,239,255,.5)";
+  }
+  el.style.display = "block";
+  el.style.top = ahead ? "13%" : "auto";
+  el.style.bottom = ahead ? "auto" : "18%";
+}
+
 // 每一帧：用对手上报的里程 + 速度外推，画出真实的相对运动
 function syncRemoteCarVisual() {
   const o = raceSync.other;
@@ -434,6 +460,7 @@ function syncRemoteCarVisual() {
   remoteCar.group.position.z += (targetZ - remoteCar.group.position.z) * 0.6;
   remoteCar.group.position.x += (targetX - remoteCar.group.position.x) * 0.6;
   remoteCar.group.rotation.y = -o.heading;
+  updateRivalMarker(rel);
   refreshGapHud();
 }
 
