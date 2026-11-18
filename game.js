@@ -320,8 +320,12 @@ function startMultiRaceCountdown() {
 
 function launchMultiRace() {
   raceSync.locked = false;
-  sound.ensureContext();
-  resetGame();                       // 两人同一时刻归零 → 同一起跑线
+  try {
+    sound.ensureContext();
+    resetGame();                     // 两人同一时刻归零 → 同一起跑线
+  } catch (error) {
+    console.error("launch error", error);
+  }
   // 真实车道：服务器给每人分配了左/右车道，画面上不再给对手加假的偏移
   carPhysics.x = (raceSync.myLane || 0) * LANE_WIDTH * 0.5;
   player.group.position.x = carPhysics.x;
@@ -867,7 +871,7 @@ const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerH
 const isMobileDevice = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobileDevice, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobileDevice ? 1.5 : 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobileDevice ? 1.15 : 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.25;
 renderer.shadowMap.enabled = !isMobileDevice;   // 手机端关阴影，帧率优先
@@ -1420,10 +1424,10 @@ const traffic = [];
 const trafficColors = [0x111111, 0x0055ff, 0xcc2222, 0x888888, 0x1e3a5f];
 
 function spawnTraffic() {
-  if (traffic.length > 46) return;   // 上限，别把手机拖垮
+  if (traffic.length > (isMobileDevice ? 24 : 40)) return;   // 手机更保守，避免卡死
 
-  // 有一定概率一次刷出并排的 2~3 辆，只留一条缝，逼玩家变道
-  const blockCount = Math.random() < 0.42 ? 2 : (Math.random() < 0.18 ? 3 : 1);
+  // 一定概率一次刷出并排的车，只留一条缝，逼玩家变道
+  const blockCount = Math.random() < 0.30 ? 2 : (Math.random() < 0.08 ? 3 : 1);
   const freeLanes = Math.max(1, LANE_COUNT - blockCount);
   const startLane = Math.floor(Math.random() * freeLanes);
 
@@ -1705,7 +1709,7 @@ function resetGame() {
   nitroBar.style.width = "100%";
 
   // 开局立即在前方车道生成 6 辆巡航车流，绝不让道路空旷！
-  const initialZ = [-70, -105, -140, -180, -220, -260, -300, -340, -380, -420, -460, -500, -540, -580];
+  const initialZ = [-80, -130, -180, -240, -300, -370, -440, -510];
   initialZ.forEach((z, idx) => {
     const laneIndex = idx % LANE_COUNT;
     const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
@@ -2115,7 +2119,7 @@ function update() {
   });
 
   // 5. 敌车刷新与真实碰撞检测 (高频刷新车流，丰富自驾驾驶感)
-  if (frame % Math.max(38, Math.floor(72 - currentSpeed * 14)) === 0) {
+  if (frame % Math.max(52, Math.floor(96 - currentSpeed * 12)) === 0) {
     spawnTraffic();
   }
   if (Math.random() < 0.03) {
