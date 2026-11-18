@@ -65,14 +65,22 @@ class SoundEngine {
     this.engineOsc = null;
     this.engineGain = null;
     this.bgmTimer = null;
-    this.bgmStep = 0;
+    this.beatCount = 0;
   }
 
   init() {
-    if (this.ctx) return;
+    if (this.ctx) {
+      if (this.ctx.state === "suspended") {
+        this.ctx.resume();
+      }
+      return;
+    }
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AudioCtx();
+      if (this.ctx.state === "suspended") {
+        this.ctx.resume();
+      }
       this.setupEngineSound();
       this.startBGM();
     } catch (e) {
@@ -88,10 +96,10 @@ class SoundEngine {
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(280, this.ctx.currentTime);
+    filter.frequency.setValueAtTime(320, this.ctx.currentTime);
 
     this.engineGain = this.ctx.createGain();
-    this.engineGain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+    this.engineGain.gain.setValueAtTime(0.06, this.ctx.currentTime);
 
     this.engineOsc.connect(filter);
     filter.connect(this.engineGain);
@@ -101,21 +109,19 @@ class SoundEngine {
 
   updateEngine(speed, isBoosting) {
     if (!this.ctx || !this.engineOsc || !this.enabled) return;
-    // 随车速平滑拉高转速频率
-    const targetFreq = 70 + speed * 60 + (isBoosting ? 50 : 0);
+    const targetFreq = 75 + speed * 65 + (isBoosting ? 55 : 0);
     this.engineOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.08);
   }
 
   playBoost() {
     if (!this.ctx || !this.enabled) return;
     const now = this.ctx.currentTime;
-    // 爆裂破风声
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(260, now);
-    osc.frequency.exponentialRampToValueAtTime(750, now + 0.35);
-    gain.gain.setValueAtTime(0.15, now);
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(800, now + 0.35);
+    gain.gain.setValueAtTime(0.25, now);
     gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
@@ -128,59 +134,124 @@ class SoundEngine {
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(987.77, now); // B5
-    osc.frequency.setValueAtTime(1318.51, now + 0.08); // E6
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(1046.5, now); // C6
+    osc.frequency.setValueAtTime(1567.98, now + 0.07); // G6
+    gain.gain.setValueAtTime(0.28, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.28);
+    osc.stop(now + 0.26);
   }
 
   playCrash() {
     if (!this.ctx || !this.enabled) return;
     const now = this.ctx.currentTime;
-    // 爆炸重击音 (低频冲激 + 爆裂噪声)
+    // 爆炸重击白噪与超重低音 (兼顾扬声器物理震感)
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(120, now);
-    osc.frequency.exponentialRampToValueAtTime(20, now + 0.6);
-    gain.gain.setValueAtTime(0.4, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
+    osc.frequency.setValueAtTime(140, now);
+    osc.frequency.exponentialRampToValueAtTime(25, now + 0.55);
+    gain.gain.setValueAtTime(0.65, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.7);
+    osc.stop(now + 0.65);
   }
 
+  // 燃动街机电子 BGM 循环 (包含 Kick 强底鼓、Hihat 清脆反拍、电音 Bass 与 Lead 旋律)
   startBGM() {
     if (!this.ctx || this.bgmTimer) return;
-    const bassNotes = [110, 110, 130.81, 146.83, 110, 110, 164.81, 146.83];
+
+    const melody = [
+      261.63, 0, 293.66, 329.63, 392.0, 0, 329.63, 293.66,
+      261.63, 0, 220.0, 261.63, 293.66, 0, 261.63, 0,
+      329.63, 0, 392.0, 440.0, 523.25, 0, 440.0, 392.0,
+      329.63, 0, 392.0, 329.63, 261.63, 0, 293.66, 0
+    ];
+
+    const bass = [
+      130.81, 130.81, 130.81, 130.81, 146.83, 146.83, 146.83, 146.83,
+      110.0, 110.0, 110.0, 110.0, 130.81, 130.81, 130.81, 130.81,
+      164.81, 164.81, 164.81, 164.81, 146.83, 146.83, 146.83, 146.83,
+      130.81, 130.81, 130.81, 130.81, 110.0, 110.0, 110.0, 110.0
+    ];
+
+    // 每 135ms 一拍 (动感 111 BPM)
     this.bgmTimer = setInterval(() => {
-      if (!this.enabled || !running) return;
+      if (!this.enabled || !this.ctx || this.ctx.state !== "running") return;
       const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = "sine";
-      const freq = bassNotes[this.bgmStep % bassNotes.length];
-      osc.frequency.setValueAtTime(freq, now);
-      gain.gain.setValueAtTime(0.04, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.22);
-      this.bgmStep++;
-    }, 220);
+      const step = this.beatCount % 32;
+
+      // 1. 动感低音鼓 Kick (四四拍动感低音)
+      if (step % 4 === 0) {
+        const kOsc = this.ctx.createOscillator();
+        const kGain = this.ctx.createGain();
+        kOsc.frequency.setValueAtTime(140, now);
+        kOsc.frequency.exponentialRampToValueAtTime(32, now + 0.12);
+        kGain.gain.setValueAtTime(0.38, now);
+        kGain.gain.linearRampToValueAtTime(0.01, now + 0.14);
+        kOsc.connect(kGain);
+        kGain.connect(this.ctx.destination);
+        kOsc.start(now);
+        kOsc.stop(now + 0.15);
+      }
+
+      // 2. 踩镲 Hi-hat (反拍清脆切分)
+      if (step % 2 === 1) {
+        const hOsc = this.ctx.createOscillator();
+        const hGain = this.ctx.createGain();
+        hOsc.type = "triangle";
+        hOsc.frequency.setValueAtTime(4500, now);
+        hGain.gain.setValueAtTime(0.08, now);
+        hGain.gain.linearRampToValueAtTime(0.001, now + 0.05);
+        hOsc.connect(hGain);
+        hGain.connect(this.ctx.destination);
+        hOsc.start(now);
+        hOsc.stop(now + 0.06);
+      }
+
+      // 3. 强劲 Synth Bass (饱满厚重低音)
+      const bFreq = bass[step];
+      if (bFreq) {
+        const bOsc = this.ctx.createOscillator();
+        const bGain = this.ctx.createGain();
+        bOsc.type = "sawtooth";
+        bOsc.frequency.setValueAtTime(bFreq, now);
+        bGain.gain.setValueAtTime(0.16, now);
+        bGain.gain.exponentialRampToValueAtTime(0.01, now + 0.11);
+        bOsc.connect(bGain);
+        bGain.connect(this.ctx.destination);
+        bOsc.start(now);
+        bOsc.stop(now + 0.12);
+      }
+
+      // 4. 主旋律 Lead (电音跑车主旋律)
+      const mFreq = melody[step];
+      if (mFreq > 0) {
+        const mOsc = this.ctx.createOscillator();
+        const mGain = this.ctx.createGain();
+        mOsc.type = "square";
+        mOsc.frequency.setValueAtTime(mFreq, now);
+        mGain.gain.setValueAtTime(0.12, now);
+        mGain.gain.exponentialRampToValueAtTime(0.005, now + 0.22);
+        mOsc.connect(mGain);
+        mGain.connect(this.ctx.destination);
+        mOsc.start(now);
+        mOsc.stop(now + 0.23);
+      }
+
+      this.beatCount++;
+    }, 135);
   }
 
   toggle() {
     this.enabled = !this.enabled;
     if (this.engineGain) {
-      this.engineGain.gain.setValueAtTime(this.enabled ? 0.04 : 0, this.ctx.currentTime);
+      this.engineGain.gain.setValueAtTime(this.enabled ? 0.06 : 0, this.ctx.currentTime);
     }
     return this.enabled;
   }
@@ -188,10 +259,14 @@ class SoundEngine {
 
 const sound = new SoundEngine();
 
-// 触觉震动马达
+// 触觉震动马达 (兼容 Android navigator.vibrate 并确保触发)
 function triggerHaptic(pattern) {
-  if (navigator.vibrate) {
-    try { navigator.vibrate(pattern); } catch (e) {}
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    try {
+      navigator.vibrate(pattern);
+    } catch (e) {
+      console.warn("Haptic failed", e);
+    }
   }
 }
 
@@ -565,7 +640,7 @@ function createSuperCar(isPlayer = true, primaryColor = 0x00d4ff) {
   diffuser.rotation.x = 0.2;
   carGroup.add(diffuser);
 
-  // 9. 赛道级车轮 (宽胎 + 五星铝合金轮毂 + 红色刹车卡钳 + 刹车盘)
+  // 9. 赛道级前轮转向与后轮驱动轮组 (前轮阿克曼转向节 + 红色卡钳 + 宽胎)
   const wheels = [];
   const tireGeo = new THREE.CylinderGeometry(0.44, 0.44, 0.4, 20);
   tireGeo.rotateZ(Math.PI / 2);
@@ -575,32 +650,42 @@ function createSuperCar(isPlayer = true, primaryColor = 0x00d4ff) {
   const caliperMat = new THREE.MeshBasicMaterial({ color: 0xff1e27 }); // 亮红运动卡钳
 
   const wheelPositions = [
-    [-1.12, 0.44, -1.4], // 前左
-    [ 1.12, 0.44, -1.4], // 前右
-    [-1.16, 0.45,  1.3], // 后左
-    [ 1.16, 0.45,  1.3]  // 后右
+    [-1.12, 0.44, -1.4], // 前左轮
+    [ 1.12, 0.44, -1.4], // 前右轮
+    [-1.16, 0.45,  1.3], // 后左轮
+    [ 1.16, 0.45,  1.3]  // 后右轮
   ];
 
-  wheelPositions.forEach(pos => {
-    const wGroup = new THREE.Group();
-    wGroup.position.set(pos[0], pos[1], pos[2]);
+  wheelPositions.forEach((pos, idx) => {
+    // 转向节支架 (前轮负责偏转)
+    const steerGroup = new THREE.Group();
+    steerGroup.position.set(pos[0], pos[1], pos[2]);
+
+    // 旋转滚动轴 (负责轮子转动)
+    const spinGroup = new THREE.Group();
 
     // 轮胎主体
     const tire = new THREE.Mesh(tireGeo, tireMat);
-    wGroup.add(tire);
+    spinGroup.add(tire);
 
     // 轮毂外圈星形
     const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.42, 12), spokeMat);
     rim.rotation.z = Math.PI / 2;
-    wGroup.add(rim);
+    spinGroup.add(rim);
 
-    // 红色刹车卡钳
-    const caliper = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, 0.22), caliperMat);
+    // 红色刹车卡钳 (固定在转向节上)
+    const caliper = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.24), caliperMat);
     caliper.position.set(pos[0] > 0 ? -0.1 : 0.1, 0.18, 0);
-    wGroup.add(caliper);
+    steerGroup.add(caliper);
 
-    carGroup.add(wGroup);
-    wheels.push(wGroup);
+    steerGroup.add(spinGroup);
+    carGroup.add(steerGroup);
+
+    wheels.push({
+      steer: steerGroup,
+      spin: spinGroup,
+      isFront: idx < 2
+    });
   });
 
   // 10. 锋芒 LED 激光前大灯
@@ -661,29 +746,27 @@ scene.add(player.group);
 player.group.position.set(0, 0, 0);
 
 // ═══════════════════════════════════════
-// 车辆物理动力学 (彻底根除后轮打滑甩尾)
+// 真实汽车阿克曼运动学 (绝不横滑漂移，轮胎纯滚动循迹前进)
 // ═══════════════════════════════════════
 const carPhysics = {
   x: 0,
-  vx: 0,
-  ax: 0,
-  steerAngle: 0,
-  roll: 0,
-  rollVel: 0,
-  yaw: 0
+  heading: 0,       // 车身航向角 (Yaw): 车头实际朝向
+  steerAngle: 0,    // 前轮物理打角
+  roll: 0,          // 悬挂侧倾
+  rollVel: 0
 };
 
-// 严谨标定的车辆参数 (前后轴循迹，后轮锁死防侧滑)
+// 严谨的汽车几何与动力学参数 (Kinematic Bicycle Model)
 const PHYS = {
-  maxSteer: 0.12,          // 前轮转向角 (~6.8度，高速微调)
-  steerRate: 3.2,          // 打角速度
-  steerReturn: 5.0,        // 回正阻尼
-  rearGripTraction: 7.5,   // 后轮循迹防滑阻尼 (彻底消灭打滑)
-  lateralAccRatio: 1.35,   // 侧向加速度增益
-  suspensionOmega: 7.2,    // 悬挂固有频率
-  suspensionZeta: 0.98,    // 悬挂阻尼比
-  rollMomentFactor: 0.038, // 侧倾力矩
-  maxRollAngle: 0.048      // 最大物理侧倾角 (~2.7度，稳定平实)
+  wheelbase: 2.7,          // 轴距 (m)
+  maxSteerAngle: 0.35,     // 前轮最大打角 (~20度，真实转向感)
+  steerRate: 4.8,          // 打角角速度
+  steerReturn: 6.5,        // 转向自动回正速度
+  maxHeading: 0.28,        // 变道最大允许车头偏转角度 (~16度，真实的切线变道)
+  headingAlignRate: 4.2,   // 松手后车头顺畅对齐赛道方向的循迹率
+  suspensionOmega: 8.0,    // 悬挂固有频率
+  suspensionZeta: 0.98,    // 临界阻尼比
+  maxRollAngle: 0.035      // 极小物理侧倾 (~2度，高速沉稳感)
 };
 
 // ═══════════════════════════════════════
@@ -812,12 +895,10 @@ function resetGame() {
   cameraTrauma = 0;
 
   carPhysics.x = 0;
-  carPhysics.vx = 0;
-  carPhysics.ax = 0;
+  carPhysics.heading = 0;
   carPhysics.steerAngle = 0;
   carPhysics.roll = 0;
   carPhysics.rollVel = 0;
-  carPhysics.yaw = 0;
 
   player.group.position.set(0, 0, 0);
   player.group.rotation.set(0, 0, 0);
@@ -859,10 +940,10 @@ async function endGame() {
   player.group.rotation.x = 0.45;
   player.group.rotation.z = -0.5;
 
-  // 3. 剧烈震动音效与触觉
+  // 3. 剧烈震动音效与触觉 (多段强力震动)
   cameraTrauma = 1.0; // 满级震屏
   sound.playCrash();
-  triggerHaptic([80, 40, 150, 40, 250]);
+  triggerHaptic([200, 80, 250, 80, 400]);
 
   try {
     await api.post("/api/scores", { name: playerName, score: finalScore });
@@ -903,45 +984,55 @@ function update() {
 
   sound.updateEngine(currentSpeed, boosting);
 
-  // 2. 转向控制（彻底杜绝后轮打滑甩尾）
+  // 2. 真实汽车阿克曼运动学 (绝不横滑漂移，轮胎纯滚动切向行进)
   const turnLeft = keys.ArrowLeft || keys.KeyA || keys.left;
   const turnRight = keys.ArrowRight || keys.KeyD || keys.right;
 
   const dt = 1 / 60;
 
+  // 驾驶员前轮转向打角 (向左为负，向右为正)
   let targetSteer = 0;
-  if (turnLeft) targetSteer = -PHYS.maxSteer;
-  else if (turnRight) targetSteer = PHYS.maxSteer;
+  if (turnLeft) targetSteer = -PHYS.maxSteerAngle;
+  else if (turnRight) targetSteer = PHYS.maxSteerAngle;
 
-  // 前轮阿克曼转向打角自回正
+  // 前轮机械角速度与自回正力矩
   const steerRate = targetSteer === 0 ? PHYS.steerReturn : PHYS.steerRate;
-  carPhysics.steerAngle += (targetSteer - carPhysics.steerAngle) * Math.min(1.0, steerRate * dt * 4.0);
+  carPhysics.steerAngle += (targetSteer - carPhysics.steerAngle) * Math.min(1.0, steerRate * dt * 3.5);
 
-  // 前轮侧向力牵引
-  const targetAx = carPhysics.steerAngle * currentSpeed * PHYS.lateralAccRatio * 28.0;
-  carPhysics.ax += (targetAx - carPhysics.ax) * 0.22;
+  // 真实车辆运动学：前轮转角带动整车航向角 (Heading / 车头朝向) 改变
+  // 绕后轴角速度: d(heading)/dt = (v / L) * tan(steerAngle)
+  const headingAngularVel = (currentSpeed / PHYS.wheelbase) * Math.tan(carPhysics.steerAngle) * 0.9;
+  carPhysics.heading += headingAngularVel * dt * 2.8;
 
-  // 后轮稳定锁死防侧滑力矩 (Rear Traction & Stability Control)
-  // dv_x / dt = ax - 摩擦阻尼
-  carPhysics.vx += (carPhysics.ax - carPhysics.vx * PHYS.rearGripTraction) * dt * 8.0;
+  // 松开按键时，车身平滑自动回正对齐车道前方
+  if (targetSteer === 0) {
+    carPhysics.heading += (0 - carPhysics.heading) * Math.min(1.0, PHYS.headingAlignRate * dt * 3.0);
+  }
 
-  carPhysics.x += carPhysics.vx * dt * 5.0;
+  // 变道最大允许车身偏转角限制 (真实公路变道角度)
+  carPhysics.heading = Math.max(-PHYS.maxHeading, Math.min(PHYS.maxHeading, carPhysics.heading));
 
-  // 赛道护栏边缘阻挡
+  // 核心物理定则：真车没有横移滑动力！横向位移完全等于前进速度在 X 轴上的切向投影！
+  // 赛车沿着车头指向向前滚行，绝无平移漂移
+  const forwardVel = currentSpeed * 22.0; // 真实前向车速
+  const lateralVel = forwardVel * Math.sin(carPhysics.heading);
+  carPhysics.x += lateralVel * dt;
+
+  // 赛道边缘阻挡
   const maxBound = ROAD_WIDTH / 2 - 1.8;
   if (carPhysics.x < -maxBound) {
     carPhysics.x = -maxBound;
-    carPhysics.vx = 0;
-    carPhysics.ax = 0;
+    carPhysics.heading = 0;
+    carPhysics.steerAngle = 0;
   }
   if (carPhysics.x > maxBound) {
     carPhysics.x = maxBound;
-    carPhysics.vx = 0;
-    carPhysics.ax = 0;
+    carPhysics.heading = 0;
+    carPhysics.steerAngle = 0;
   }
 
-  // 悬挂系统二阶弹簧-阻尼系统 (消除左右摇摆晃动)
-  const centrifugalForce = -carPhysics.ax * PHYS.rollMomentFactor;
+  // 极微弱的真实底盘悬挂阻尼侧倾 (高速沉稳，绝不晃动)
+  const centrifugalForce = -lateralVel * 0.003;
   const rollSpringForce = -Math.pow(PHYS.suspensionOmega, 2) * carPhysics.roll;
   const rollDamperForce = -2 * PHYS.suspensionZeta * PHYS.suspensionOmega * carPhysics.rollVel;
   const rollAcc = centrifugalForce + rollSpringForce + rollDamperForce;
@@ -950,24 +1041,23 @@ function update() {
   carPhysics.roll += carPhysics.rollVel * dt * 2.0;
   carPhysics.roll = Math.max(-PHYS.maxRollAngle, Math.min(PHYS.maxRollAngle, carPhysics.roll));
 
-  // 循迹航向角 Yaw (顺滑跟车头方向，后轴不侧滑)
-  const targetYaw = Math.atan2(carPhysics.vx * 0.25, currentSpeed * 1.8);
-  carPhysics.yaw += (targetYaw - carPhysics.yaw) * 0.2;
-
-  // 应用位移与姿态
+  // 应用位置与姿态：车头切实指向变道方向
   player.group.position.x = carPhysics.x;
-  player.group.rotation.z = carPhysics.roll;
-  player.group.rotation.y = carPhysics.yaw;
+  player.group.rotation.y = carPhysics.heading; // 车头朝向变道方向
+  player.group.rotation.z = carPhysics.roll;    // 悬挂吸收震动
 
-  // 前轮物理打角
-  player.wheels[0].rotation.y = carPhysics.steerAngle * 1.5;
-  player.wheels[1].rotation.y = carPhysics.steerAngle * 1.5;
+  // 前轮非常明显直观的物理转向打角 (前轮大角度偏转，一眼可清清楚楚看到前轮转向！)
+  player.wheels[0].steer.rotation.y = carPhysics.steerAngle;
+  player.wheels[1].steer.rotation.y = carPhysics.steerAngle;
 
-  // 后轮始终平行于车身底盘 (0打角，紧锁轨迹)，四轮高速旋转
-  const wheelSpin = currentSpeed * 0.65;
+  // 后轮紧锁车身底盘 (0 转向打角，绝对不偏)
+  player.wheels[2].steer.rotation.y = 0;
+  player.wheels[3].steer.rotation.y = 0;
+
+  // 四轮沿着地面物理切线滚转 (无漂移横移)
+  const wheelSpin = currentSpeed * 0.7;
   player.wheels.forEach(w => {
-    w.children[0].rotation.x += wheelSpin; // 轮胎旋转
-    w.children[1].rotation.x += wheelSpin; // 轮毂旋转
+    w.spin.rotation.x += wheelSpin;
   });
 
   // 3. 氮气推进火焰
@@ -1016,8 +1106,7 @@ function update() {
     const enemy = traffic[i];
     enemy.group.position.z += moveZ - enemy.speed * 1.4;
     enemy.wheels.forEach(w => {
-      w.children[0].rotation.x += 0.3;
-      w.children[1].rotation.x += 0.3;
+      w.spin.rotation.x += 0.35;
     });
 
     const dx = Math.abs(player.group.position.x - enemy.group.position.x);
@@ -1223,10 +1312,22 @@ if (audioToggle) {
   });
 }
 
+// 全局触摸/点击立即解锁动感音乐与手机震动
+function unlockAudioAndHaptics() {
+  sound.init();
+  triggerHaptic(1);
+}
+window.addEventListener("pointerdown", unlockAudioAndHaptics, { passive: true });
+window.addEventListener("touchstart", unlockAudioAndHaptics, { passive: true });
+window.addEventListener("click", unlockAudioAndHaptics, { passive: true });
+
 bindButton("#left", "left");
 bindButton("#right", "right");
 bindButton("#boost", "boost");
-document.querySelector("#start").addEventListener("click", startGame);
+document.querySelector("#start").addEventListener("click", (e) => {
+  unlockAudioAndHaptics();
+  startGame();
+});
 refreshRanks.addEventListener("click", loadLeaderboard);
 
 // 初始化
