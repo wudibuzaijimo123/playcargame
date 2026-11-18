@@ -4,7 +4,7 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #050610;
+  background: #050614;
   color: #f8fbff;
   font-family: 'Rajdhani', "Segoe UI", system-ui, sans-serif;
   font-weight: 600;
@@ -13,17 +13,12 @@ html, body {
   user-select: none;
 }
 
-body::before {
-  content: "";
-  position: fixed;
+#game-container {
+  position: absolute;
   inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(#ffffff06 1px, transparent 1px),
-    linear-gradient(90deg, #ffffff06 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
-  z-index: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
 }
 
 canvas {
@@ -34,43 +29,43 @@ canvas {
 }
 
 /* ═══════════════════════════════════════
-   TOP BAR
+   TOP BAR 顶部品牌与状态
    ═══════════════════════════════════════ */
 .topbar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  z-index: 4;
+  z-index: 10;
   pointer-events: none;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 16px 20px;
-  background: linear-gradient(to bottom, rgba(5, 6, 16, 0.8) 0%, rgba(5, 6, 16, 0.3) 70%, transparent 100%);
+  padding: 16px 24px;
+  background: linear-gradient(to bottom, rgba(5, 6, 20, 0.85) 0%, rgba(5, 6, 20, 0.2) 70%, transparent 100%);
 }
 
 .eyebrow {
   color: #7ef7ff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: .22em;
+  letter-spacing: .24em;
   font-family: 'Orbitron', sans-serif;
-  text-shadow: 0 0 12px rgba(126, 247, 255, 0.5);
+  text-shadow: 0 0 12px rgba(126, 247, 255, 0.6);
 }
 
 .brand {
-  margin-top: 2px;
+  margin-top: 3px;
   color: #ffffff;
-  font-size: clamp(22px, 5vw, 44px);
+  font-size: clamp(24px, 5vw, 44px);
   font-weight: 900;
   font-style: italic;
   font-family: 'Orbitron', sans-serif;
   letter-spacing: 2px;
   text-shadow:
     0 0 8px rgba(39, 232, 255, 0.8),
-    0 0 20px rgba(39, 232, 255, 0.4),
-    0 0 40px rgba(212, 92, 255, 0.25);
+    0 0 24px rgba(39, 232, 255, 0.4),
+    0 0 45px rgba(212, 92, 255, 0.3);
 }
 
 .server {
@@ -78,12 +73,12 @@ canvas {
   align-items: center;
   gap: 7px;
   min-width: 108px;
-  padding: 8px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 20px;
-  background: rgba(12, 16, 39, 0.8);
+  background: rgba(12, 16, 42, 0.85);
   color: #bfc5e8;
-  font-size: 11px;
+  font-size: 12px;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -114,27 +109,27 @@ canvas {
 }
 
 /* ═══════════════════════════════════════
-   HUD — 速度 / 分数 / 最佳 (Desktop: Left side)
+   HUD 速度计 / 分数 / 纪录
    ═══════════════════════════════════════ */
 .hud {
   position: fixed;
-  left: 20px;
-  top: 100px;
-  z-index: 4;
+  left: 24px;
+  top: 105px;
+  z-index: 10;
   pointer-events: none;
   display: grid;
   gap: 10px;
-  width: 126px;
+  width: 130px;
 }
 
 .metric {
   padding: 12px 14px;
-  border: 1px solid rgba(98, 239, 255, 0.18);
+  border: 1px solid rgba(98, 239, 255, 0.22);
   border-radius: 12px;
-  background: linear-gradient(145deg, rgba(10, 14, 38, 0.88) 0%, rgba(18, 22, 55, 0.88) 100%);
+  background: linear-gradient(145deg, rgba(10, 14, 38, 0.85) 0%, rgba(18, 22, 55, 0.85) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 8px 28px rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -142,40 +137,40 @@ canvas {
 .metric strong {
   display: block;
   color: #67f6ff;
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 900;
   font-family: 'Orbitron', monospace;
   line-height: 1;
-  text-shadow: 0 0 14px rgba(103, 246, 255, 0.5);
+  text-shadow: 0 0 14px rgba(103, 246, 255, 0.6);
 }
 
 .metric span {
   display: block;
-  margin-top: 4px;
-  color: rgba(147, 154, 191, 0.8);
-  font-size: 10px;
+  margin-top: 5px;
+  color: rgba(147, 154, 191, 0.85);
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   font-weight: 700;
 }
 
 /* ═══════════════════════════════════════
-   LEADERBOARD
+   LEADERBOARD 排行榜 (PC 端右侧)
    ═══════════════════════════════════════ */
 .leaderboard {
   position: fixed;
-  top: 100px;
-  right: 20px;
-  z-index: 3;
-  width: min(280px, 28vw);
+  top: 105px;
+  right: 24px;
+  z-index: 10;
+  width: min(290px, 28vw);
   max-height: calc(100vh - 160px);
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   background: linear-gradient(185deg, rgba(10, 13, 34, 0.88) 0%, rgba(8, 10, 25, 0.92) 100%);
   box-shadow:
     0 16px 50px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   overflow-y: auto;
@@ -183,7 +178,7 @@ canvas {
 
 .leaderboard::-webkit-scrollbar { width: 4px; }
 .leaderboard::-webkit-scrollbar-thumb {
-  background: rgba(98, 239, 255, 0.3);
+  background: rgba(98, 239, 255, 0.35);
   border-radius: 2px;
 }
 
@@ -194,23 +189,22 @@ canvas {
   color: #fff;
   font-size: 14px;
   font-weight: 900;
-  letter-spacing: 0.05em;
 }
 
 .panel-title button {
   cursor: pointer;
-  border: 1px solid rgba(100, 239, 255, 0.3);
+  border: 1px solid rgba(100, 239, 255, 0.35);
   border-radius: 16px;
   padding: 4px 12px;
-  background: rgba(19, 32, 63, 0.7);
+  background: rgba(19, 32, 63, 0.8);
   color: #8ff8ff;
   font-size: 11px;
   font-weight: 700;
-  transition: all 0.25s;
+  transition: all 0.2s;
 }
 
 .panel-title button:active {
-  background: rgba(100, 239, 255, 0.15);
+  background: rgba(100, 239, 255, 0.2);
   transform: scale(0.95);
 }
 
@@ -237,16 +231,16 @@ li span {
 }
 
 /* ═══════════════════════════════════════
-   NITRO BAR
+   NITRO 氮气槽
    ═══════════════════════════════════════ */
 .nitro {
   position: fixed;
-  left: 20px;
+  left: 24px;
   bottom: 24px;
-  z-index: 4;
+  z-index: 10;
   width: min(320px, 46vw);
   height: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 99px;
   background: rgba(8, 8, 25, 0.7);
   overflow: hidden;
@@ -258,10 +252,10 @@ li span {
   height: 100%;
   width: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, #3ee9ff, #a95cff, #ff5cd4, #3ee9ff);
+  background: linear-gradient(90deg, #3ee9ff, #a95cff, #ff3ea5, #3ee9ff);
   background-size: 300% 100%;
-  box-shadow: 0 0 16px rgba(84, 234, 255, 0.5);
-  transition: width .1s ease-out;
+  box-shadow: 0 0 16px rgba(84, 234, 255, 0.6);
+  transition: width .08s ease-out;
   animation: nitro-flow 3s linear infinite, nitro-pulse 1.5s ease-in-out infinite alternate;
 }
 
@@ -271,21 +265,21 @@ li span {
 }
 
 @keyframes nitro-pulse {
-  0% { opacity: 0.75; box-shadow: 0 0 10px rgba(62, 233, 255, 0.4); }
-  100% { opacity: 1; box-shadow: 0 0 22px rgba(182, 92, 255, 0.6); }
+  0% { opacity: 0.8; box-shadow: 0 0 10px rgba(62, 233, 255, 0.4); }
+  100% { opacity: 1; box-shadow: 0 0 22px rgba(182, 92, 255, 0.7); }
 }
 
 /* ═══════════════════════════════════════
-   OVERLAY / MENU
+   OVERLAY / 游戏主菜单
    ═══════════════════════════════════════ */
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 5;
+  z-index: 20;
   display: grid;
   place-items: center;
   padding: 20px;
-  background: radial-gradient(ellipse at 50% 30%, rgba(39, 76, 117, 0.6), rgba(5, 6, 16, 0.95) 70%);
+  background: radial-gradient(ellipse at 50% 35%, rgba(20, 45, 90, 0.7), rgba(5, 6, 20, 0.95) 75%);
   transition: opacity .3s ease, visibility .3s ease;
 }
 
@@ -297,15 +291,15 @@ li span {
 
 .menu {
   width: min(520px, 92vw);
-  padding: 36px 32px;
+  padding: 38px 32px;
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 18px;
   background: rgba(12, 16, 42, 0.92);
   box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.6),
-    0 0 60px rgba(98, 239, 255, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 30px 90px rgba(0, 0, 0, 0.7),
+    0 0 60px rgba(98, 239, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
@@ -314,13 +308,13 @@ li span {
   color: #7ef7ff;
   font-size: 11px;
   font-weight: 900;
-  letter-spacing: .22em;
-  text-shadow: 0 0 10px rgba(126, 247, 255, 0.4);
+  letter-spacing: .24em;
+  text-shadow: 0 0 10px rgba(126, 247, 255, 0.5);
 }
 
 h1 {
   margin: 6px 0 0;
-  font-size: clamp(40px, 10vw, 76px);
+  font-size: clamp(38px, 10vw, 72px);
   line-height: .95;
   font-style: italic;
   font-family: 'Orbitron', sans-serif;
@@ -329,7 +323,7 @@ h1 {
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 18px rgba(88, 239, 255, 0.35));
+  filter: drop-shadow(0 0 18px rgba(88, 239, 255, 0.4));
 }
 
 p {
@@ -342,7 +336,7 @@ p {
 .name-field {
   display: grid;
   gap: 8px;
-  margin: 20px auto 16px;
+  margin: 22px auto 16px;
   width: min(340px, 100%);
   text-align: left;
   color: #aeb5da;
@@ -352,12 +346,12 @@ p {
 }
 
 .name-field input {
-  height: 46px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 10px;
   outline: none;
   padding: 0 14px;
-  background: rgba(8, 13, 31, 0.9);
+  background: rgba(8, 13, 31, 0.95);
   color: #fff;
   font-size: 16px;
   font-family: inherit;
@@ -366,24 +360,24 @@ p {
 
 .name-field input:focus {
   border-color: #63efff;
-  box-shadow: 0 0 0 3px rgba(99, 239, 255, 0.12), 0 0 20px rgba(99, 239, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(99, 239, 255, 0.15), 0 0 20px rgba(99, 239, 255, 0.15);
 }
 
 .start {
   cursor: pointer;
   border: 0;
   border-radius: 12px;
-  padding: 14px 36px;
+  padding: 15px 38px;
   font-weight: 900;
-  font-size: 17px;
+  font-size: 18px;
   font-family: 'Orbitron', sans-serif;
   letter-spacing: 1.5px;
   color: #06111d;
   background: linear-gradient(135deg, #59efff 0%, #a06cff 50%, #ff6cd4 100%);
   background-size: 200% 200%;
   box-shadow:
-    0 6px 28px rgba(92, 239, 255, 0.35),
-    0 0 0 1px rgba(255, 255, 255, 0.1);
+    0 6px 28px rgba(92, 239, 255, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.12);
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   animation: btn-gradient 4s ease infinite;
 }
@@ -396,25 +390,22 @@ p {
 .start:hover {
   transform: scale(1.05) translateY(-1px);
   box-shadow:
-    0 10px 36px rgba(92, 239, 255, 0.5),
-    0 0 24px rgba(193, 108, 255, 0.4);
-  letter-spacing: 2.5px;
+    0 10px 36px rgba(92, 239, 255, 0.6),
+    0 0 24px rgba(193, 108, 255, 0.5);
 }
 
 .start:active {
   transform: scale(0.97);
-  box-shadow: 0 4px 16px rgba(92, 239, 255, 0.3);
 }
 
 .tips {
   margin-top: 16px;
-  color: rgba(131, 137, 173, 0.7);
-  font-size: 11px;
-  letter-spacing: 0.03em;
+  color: rgba(131, 137, 173, 0.8);
+  font-size: 12px;
 }
 
 /* ═══════════════════════════════════════
-   MOBILE CONTROLS
+   触屏控制按键 (移动端 QQ飞车式布局)
    ═══════════════════════════════════════ */
 .controls {
   display: none;
@@ -422,248 +413,136 @@ p {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 4;
+  z-index: 10;
   justify-content: center;
   align-items: flex-end;
-  gap: 16px;
-  padding: 0 20px 18px;
-  /* 底部渐变遮罩，像仪表盘 */
-  background: linear-gradient(to top, rgba(5, 6, 16, 0.65) 0%, rgba(5, 6, 16, 0.3) 60%, transparent 100%);
-  padding-top: 30px;
+  gap: 24px;
+  padding: 30px 20px 20px;
+  background: linear-gradient(to top, rgba(5, 6, 20, 0.75) 0%, rgba(5, 6, 20, 0.2) 60%, transparent 100%);
 }
 
 .controls button {
-  width: 62px;
-  height: 62px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
-  border: 1.5px solid rgba(98, 239, 255, 0.3);
-  background: rgba(10, 14, 36, 0.75);
+  border: 2px solid rgba(98, 239, 255, 0.35);
+  background: rgba(10, 14, 38, 0.8);
   color: #c0f4ff;
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 700;
   box-shadow:
-    0 0 16px rgba(72, 232, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    0 0 20px rgba(72, 232, 255, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   touch-action: none;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   transition: all 0.12s ease;
-  position: relative;
 }
 
 .controls button:active {
   transform: scale(0.88);
-  border-color: rgba(98, 239, 255, 0.7);
-  background: rgba(98, 239, 255, 0.12);
-  box-shadow:
-    0 0 24px rgba(98, 239, 255, 0.35),
-    inset 0 0 10px rgba(98, 239, 255, 0.08);
+  border-color: rgba(98, 239, 255, 0.9);
+  background: rgba(98, 239, 255, 0.2);
+  box-shadow: 0 0 32px rgba(98, 239, 255, 0.5);
 }
 
 .controls .boost {
-  width: 72px;
-  height: 72px;
-  font-size: 11px;
+  width: 88px;
+  height: 88px;
+  font-size: 13px;
   font-weight: 900;
   font-family: 'Orbitron', sans-serif;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
+  line-height: 1.2;
   color: #fff;
-  border-color: rgba(182, 92, 255, 0.35);
-  background: linear-gradient(145deg, rgba(23, 108, 134, 0.7), rgba(116, 43, 142, 0.7));
+  border-width: 2px;
+  border-color: rgba(182, 92, 255, 0.5);
+  background: linear-gradient(145deg, rgba(23, 108, 134, 0.75), rgba(116, 43, 142, 0.75));
   box-shadow:
-    0 0 20px rgba(160, 92, 255, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 0 24px rgba(160, 92, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   animation: boost-breathe 2.5s ease-in-out infinite;
 }
 
 @keyframes boost-breathe {
-  0%, 100% { box-shadow: 0 0 16px rgba(160, 92, 255, 0.1); }
-  50% { box-shadow: 0 0 26px rgba(160, 92, 255, 0.25); }
+  0%, 100% { box-shadow: 0 0 18px rgba(160, 92, 255, 0.15); }
+  50% { box-shadow: 0 0 32px rgba(160, 92, 255, 0.35); }
 }
 
 .controls .boost:active {
-  border-color: rgba(182, 92, 255, 0.8);
-  background: linear-gradient(145deg, rgba(30, 140, 170, 0.8), rgba(150, 55, 180, 0.8));
-  box-shadow: 0 0 32px rgba(182, 92, 255, 0.4);
+  border-color: rgba(182, 92, 255, 0.95);
+  background: linear-gradient(145deg, rgba(30, 140, 170, 0.9), rgba(150, 55, 180, 0.9));
+  box-shadow: 0 0 40px rgba(182, 92, 255, 0.6);
   transform: scale(0.9);
 }
 
 /* ═══════════════════════════════════════
-   MOBILE  (<= 850px)
-   HUD 移到顶部，不再挡住赛车
+   移动端响应式 (<= 850px)
    ═══════════════════════════════════════ */
 @media (max-width: 850px) {
   .leaderboard { display: none; }
   .server { display: none; }
 
-  .topbar {
-    padding: 10px 14px 6px;
-  }
+  .topbar { padding: 12px 16px 6px; }
+  .eyebrow { font-size: 9px; }
+  .brand { font-size: clamp(20px, 5vw, 30px); }
 
-  .eyebrow { font-size: 8px; letter-spacing: 0.18em; }
-  .brand { font-size: clamp(18px, 4.5vw, 28px); margin-top: 1px; }
-
-  /* ── HUD 移到顶部，紧贴标题下方，横向一排 ── */
+  /* 顶部横排仪表 */
   .hud {
     position: fixed;
-    top: auto;
-    /* 用 CSS 计算放到 topbar 下面 */
-    top: 52px;
+    top: 56px;
     bottom: auto;
-    left: 14px;
-    right: 14px;
+    left: 12px;
+    right: 12px;
     width: auto;
     grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
+    gap: 8px;
   }
 
   .metric {
-    padding: 6px 8px;
-    border-radius: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
     text-align: center;
-    background: rgba(10, 14, 38, 0.7);
-    border-color: rgba(98, 239, 255, 0.1);
-    box-shadow: none;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: rgba(10, 14, 38, 0.75);
+    border-color: rgba(98, 239, 255, 0.15);
   }
 
-  .metric strong {
-    font-size: 18px;
-    text-shadow: 0 0 10px rgba(103, 246, 255, 0.4);
-  }
+  .metric strong { font-size: 24px; }
+  .metric span { font-size: 10px; margin-top: 2px; }
 
-  .metric span {
-    font-size: 8px;
-    margin-top: 2px;
-    letter-spacing: 0.1em;
-  }
-
-  /* ── 氮气条在控制按钮正上方 ── */
+  /* 氮气槽在按键上方居中 */
   .nitro {
-    left: 60px;
-    right: 60px;
-    bottom: 90px;
+    left: 36px;
+    right: 36px;
+    bottom: 116px;
     width: auto;
-    height: 6px;
-    border-radius: 3px;
+    height: 8px;
+    border-radius: 4px;
   }
 
-  .nitro div { border-radius: 3px; }
+  .nitro div { border-radius: 4px; }
 
-  /* ── 控制按钮居中底部 ── */
   .controls {
-    padding-bottom: 16px;
-    gap: 18px;
+    padding-bottom: 20px;
+    gap: 24px;
   }
 
-  .controls button {
-    width: 58px;
-    height: 58px;
-    font-size: 20px;
-  }
-
-  .controls .boost {
-    width: 68px;
-    height: 68px;
-    font-size: 10px;
-  }
-
-  /* ── 菜单适配 ── */
   .menu {
-    padding: 26px 20px;
-    border-radius: 14px;
+    padding: 28px 22px;
+    border-radius: 16px;
   }
 
-  h1 { font-size: clamp(34px, 10vw, 52px); }
+  h1 { font-size: clamp(34px, 10vw, 50px); }
 
   .start {
-    padding: 12px 28px;
-    font-size: 15px;
-    border-radius: 10px;
+    padding: 13px 32px;
+    font-size: 16px;
   }
-
-  .tips { font-size: 10px; }
 }
 
 /* ═══════════════════════════════════════
-   小屏手机 (< 400px)
-   ═══════════════════════════════════════ */
-@media (max-width: 400px) {
-  .topbar { padding: 8px 10px 4px; }
-  .eyebrow { font-size: 7px; }
-  .brand { font-size: 16px; }
-
-  .hud {
-    top: 44px;
-    left: 10px;
-    right: 10px;
-    gap: 4px;
-  }
-
-  .metric { padding: 5px 6px; }
-  .metric strong { font-size: 16px; }
-  .metric span { font-size: 7px; }
-
-  .nitro {
-    left: 50px;
-    right: 50px;
-    bottom: 82px;
-    height: 5px;
-  }
-
-  .controls {
-    padding-bottom: 12px;
-    gap: 14px;
-  }
-
-  .controls button { width: 52px; height: 52px; font-size: 18px; }
-  .controls .boost { width: 62px; height: 62px; font-size: 9px; }
-}
-
-/* ═══════════════════════════════════════
-   触屏设备显示控制按钮
+   触屏设备显示手柄
    ═══════════════════════════════════════ */
 @media (pointer: coarse) {
   .controls { display: flex; }
-}
-
-/* ═══════════════════════════════════════
-   横屏手机
-   ═══════════════════════════════════════ */
-@media (max-height: 500px) and (pointer: coarse) {
-  .topbar { display: none; }
-
-  .hud {
-    top: 8px;
-    left: 8px;
-    right: auto;
-    width: auto;
-    grid-template-columns: repeat(3, auto);
-    gap: 4px;
-  }
-
-  .metric { padding: 4px 8px; }
-  .metric strong { font-size: 14px; }
-  .metric span { font-size: 7px; margin-top: 1px; }
-
-  .nitro {
-    top: 8px;
-    bottom: auto;
-    right: 8px;
-    left: auto;
-    width: 100px;
-    height: 5px;
-  }
-
-  .controls {
-    right: 8px;
-    left: auto;
-    width: auto;
-    padding-bottom: 8px;
-    background: none;
-  }
-
-  .controls button { width: 46px; height: 46px; font-size: 16px; }
-  .controls .boost { width: 54px; height: 54px; font-size: 8px; }
 }

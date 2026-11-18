@@ -1,5 +1,9 @@
+/**
+ * NEON DRIFT 3D - Three.js QQ飞车视角极速赛车引擎
+ */
+
+// ── DOM 节点 ──
 const canvas = document.querySelector("#game");
-const ctx = canvas.getContext("2d");
 const overlay = document.querySelector("#overlay");
 const title = document.querySelector("#title");
 const message = document.querySelector("#message");
@@ -13,23 +17,14 @@ const refreshRanks = document.querySelector("#refreshRanks");
 const serverDot = document.querySelector("#serverDot");
 const serverText = document.querySelector("#serverText");
 
-let width;
-let height;
-let roadLeft;
-let roadRight;
-let laneWidth;
-let roadOffset = 0;
+// ── 游戏基础变量 ──
 let running = false;
 let score = 0;
 let nitro = 100;
-let baseSpeed = 5;
+let baseSpeed = 1.0;     // 正常行进速度倍率
+let currentSpeed = 1.0;
 let boosting = false;
 let frame = 0;
-let traffic = [];
-let coins = [];
-let particles = [];
-let stars = [];
-let speedLines = [];
 const keys = {};
 
 let best = Number(localStorage.getItem("neonRushBest") || 0);
@@ -37,6 +32,7 @@ let playerName = localStorage.getItem("neonRacerName") || "";
 playerNameInput.value = playerName;
 bestEl.textContent = best;
 
+// ── API 接口 ──
 const api = {
   async get(path) {
     const response = await fetch(path);
@@ -54,660 +50,660 @@ const api = {
   }
 };
 
-const car = { x: 0, y: 0, width: 54, height: 92, velocityX: 0 };
+// ═══════════════════════════════════════
+// THREE.JS 3D 场景初始化
+// ═══════════════════════════════════════
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x050614, 0.008);
 
-function resize() {
-  const density = Math.min(devicePixelRatio || 1, 2);
-  width = innerWidth;
-  height = innerHeight;
-  canvas.width = width * density;
-  canvas.height = height * density;
-  ctx.setTransform(density, 0, 0, density, 0, 0);
-  roadLeft = Math.max(25, width * .18);
-  roadRight = width - roadLeft;
-  laneWidth = (roadRight - roadLeft) / 4;
-  car.y = height - 180;
-  if (!running) car.x = width / 2 - car.width / 2;
-  stars = Array.from({ length: 90 }, () => ({
-    x: Math.random() * width,
-    y: Math.random() * height,
-    radius: Math.random() * 1.7 + .3,
-    alpha: Math.random() * .7 + .2
-  }));
-  speedLines = Array.from({ length: 8 }, () => resetSpeedLine({}));
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 800);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.25;
+
+// ── 灯光配置 ──
+const ambientLight = new THREE.AmbientLight(0x4466aa, 1.2);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(20, 40, 20);
+scene.add(dirLight);
+
+// 玩家车尾霓虹光
+const playerLight = new THREE.PointLight(0x00ffff, 2.0, 15);
+scene.add(playerLight);
+
+// ═══════════════════════════════════════
+// 赛道与城市环境生成
+// ═══════════════════════════════════════
+const ROAD_WIDTH = 22;
+const LANE_COUNT = 4;
+const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
+const ROAD_SEGMENT_LENGTH = 120;
+const ROAD_SEGMENTS = 4;
+const TOTAL_ROAD_LEN = ROAD_SEGMENT_LENGTH * ROAD_SEGMENTS;
+
+const roadGroup = new THREE.Group();
+scene.add(roadGroup);
+
+// 创建赛道路面与护栏
+const roadSegments = [];
+function createRoadSegment(zOffset) {
+  const seg = new THREE.Group();
+  seg.position.z = zOffset;
+
+  // 1. 主路面 (沥青科技黑)
+  const roadGeo = new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_SEGMENT_LENGTH);
+  const roadMat = new THREE.MeshStandardMaterial({
+    color: 0x0a0c18,
+    roughness: 0.6,
+    metalness: 0.4
+  });
+  const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+  roadMesh.rotation.x = -Math.PI / 2;
+  roadMesh.position.y = 0;
+  seg.add(roadMesh);
+
+  // 2. 车道分隔白线 (虚线)
+  for (let i = 1; i < LANE_COUNT; i++) {
+    const laneX = -ROAD_WIDTH / 2 + i * LANE_WIDTH;
+    const stripeCount = 10;
+    for (let s = 0; s < stripeCount; s++) {
+      const stripeGeo = new THREE.PlaneGeometry(0.25, 6);
+      const stripeMat = new THREE.MeshBasicMaterial({ color: 0x99ccff });
+      const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+      stripe.rotation.x = -Math.PI / 2;
+      stripe.position.set(laneX, 0.02, -ROAD_SEGMENT_LENGTH / 2 + s * (ROAD_SEGMENT_LENGTH / stripeCount) + 3);
+      seg.add(stripe);
+    }
+  }
+
+  // 3. 左右两侧霓虹护栏
+  const guardGeo = new THREE.BoxGeometry(0.4, 0.7, ROAD_SEGMENT_LENGTH);
+  
+  // 左侧粉紫光轨
+  const leftMat = new THREE.MeshBasicMaterial({ color: 0xff2ad4 });
+  const leftRail = new THREE.Mesh(guardGeo, leftMat);
+  leftRail.position.set(-ROAD_WIDTH / 2 - 0.2, 0.35, 0);
+  seg.add(leftRail);
+
+  // 右侧青蓝光轨
+  const rightMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+  const rightRail = new THREE.Mesh(guardGeo, rightMat);
+  rightRail.position.set(ROAD_WIDTH / 2 + 0.2, 0.35, 0);
+  seg.add(rightRail);
+
+  // 4. 护栏立柱
+  for (let p = -ROAD_SEGMENT_LENGTH / 2; p <= ROAD_SEGMENT_LENGTH / 2; p += 15) {
+    const postGeo = new THREE.BoxGeometry(0.6, 1.2, 0.6);
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x111628, metalness: 0.8 });
+    const postL = new THREE.Mesh(postGeo, postMat);
+    postL.position.set(-ROAD_WIDTH / 2 - 0.3, 0.6, p);
+    seg.add(postL);
+
+    const postR = new THREE.Mesh(postGeo, postMat);
+    postR.position.set(ROAD_WIDTH / 2 + 0.3, 0.6, p);
+    seg.add(postR);
+  }
+
+  roadGroup.add(seg);
+  roadSegments.push(seg);
 }
 
-function resetSpeedLine(line) {
-  line.x = Math.random() * width;
-  line.y = -Math.random() * height;
-  line.length = Math.random() * 100 + 60;
-  line.speed = Math.random() * 18 + 18;
-  line.alpha = Math.random() * 0.22 + 0.05;
-  return line;
+for (let i = 0; i < ROAD_SEGMENTS; i++) {
+  createRoadSegment(-i * ROAD_SEGMENT_LENGTH);
 }
 
-function reset() {
-  traffic = [];
-  coins = [];
-  particles = [];
-  score = 0;
-  nitro = 100;
-  baseSpeed = 5;
-  frame = 0;
-  car.x = width / 2 - car.width / 2;
-  car.velocityX = 0;
-  scoreEl.textContent = "0";
-  nitroBar.style.width = "100%";
+// ── 两侧赛博朋克摩天楼群 ──
+const buildings = [];
+const cityGroup = new THREE.Group();
+scene.add(cityGroup);
+
+const buildingColors = [0x090f26, 0x111633, 0x180b2c, 0x061528];
+const windowColors = [0x00ffff, 0xff00cc, 0xffea00, 0x3388ff];
+
+for (let i = 0; i < 48; i++) {
+  const bW = 10 + Math.random() * 14;
+  const bH = 30 + Math.random() * 70;
+  const bD = 12 + Math.random() * 16;
+  const bGeo = new THREE.BoxGeometry(bW, bH, bD);
+  const bMat = new THREE.MeshStandardMaterial({
+    color: buildingColors[Math.floor(Math.random() * buildingColors.length)],
+    roughness: 0.5,
+    metalness: 0.7
+  });
+  const bMesh = new THREE.Mesh(bGeo, bMat);
+
+  // 随机分布在左右两侧远景
+  const side = i % 2 === 0 ? -1 : 1;
+  const dist = ROAD_WIDTH / 2 + 16 + Math.random() * 45;
+  bMesh.position.set(side * dist, bH / 2 - 2, -Math.random() * TOTAL_ROAD_LEN);
+
+  // 顶楼霓虹发光招牌天际线
+  if (Math.random() > 0.4) {
+    const signGeo = new THREE.BoxGeometry(bW * 0.7, 1.5, 0.4);
+    const signMat = new THREE.MeshBasicMaterial({
+      color: windowColors[Math.floor(Math.random() * windowColors.length)]
+    });
+    const sign = new THREE.Mesh(signGeo, signMat);
+    sign.position.set(0, bH / 2 + 1, 0);
+    bMesh.add(sign);
+  }
+
+  cityGroup.add(bMesh);
+  buildings.push(bMesh);
 }
 
-function start() {
-  playerName = playerNameInput.value.trim() || "无名车手";
-  localStorage.setItem("neonRacerName", playerName);
-  reset();
-  running = true;
-  overlay.classList.add("hidden");
+// ── 动态星空粒子 ──
+const starCount = 300;
+const starGeo = new THREE.BufferGeometry();
+const starPos = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount * 3; i += 3) {
+  starPos[i] = (Math.random() - 0.5) * 400;
+  starPos[i + 1] = 20 + Math.random() * 120;
+  starPos[i + 2] = -Math.random() * 400;
+}
+starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
+const starMat = new THREE.PointsMaterial({ color: 0x88ccff, size: 1.5, transparent: true, opacity: 0.8 });
+const starPoints = new THREE.Points(starGeo, starMat);
+scene.add(starPoints);
+
+// ── 氮气极速流线粒子 ──
+const streakCount = 80;
+const streakGeo = new THREE.BufferGeometry();
+const streakPos = new Float32Array(streakCount * 6); // 每条线2个顶点
+for (let i = 0; i < streakCount; i++) {
+  const idx = i * 6;
+  const x = (Math.random() - 0.5) * ROAD_WIDTH * 1.5;
+  const y = 0.5 + Math.random() * 6;
+  const z = -Math.random() * 100;
+  streakPos[idx] = x;
+  streakPos[idx + 1] = y;
+  streakPos[idx + 2] = z;
+  streakPos[idx + 3] = x;
+  streakPos[idx + 4] = y;
+  streakPos[idx + 5] = z - 6;
+}
+streakGeo.setAttribute("position", new THREE.BufferAttribute(streakPos, 3));
+const streakMat = new THREE.LineBasicMaterial({ color: 0x55ffff, transparent: true, opacity: 0 });
+const speedLines = new THREE.LineSegments(streakGeo, streakMat);
+scene.add(speedLines);
+
+// ═══════════════════════════════════════
+// 3D 玩家赛车模型构建 (QQ飞车超跑造型)
+// ═══════════════════════════════════════
+function createSuperCar(isPlayer = true, primaryColor = 0x00f0ff) {
+  const carGroup = new THREE.Group();
+
+  // 1. 车身底盘主壳体 (低趴流线型)
+  const bodyGeo = new THREE.BoxGeometry(2.1, 0.45, 4.4);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: primaryColor,
+    roughness: 0.2,
+    metalness: 0.8
+  });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = 0.45;
+  carGroup.add(body);
+
+  // 2. 驾驶舱风挡玻璃 (流体黑色带青光)
+  const cabinGeo = new THREE.BoxGeometry(1.4, 0.42, 2.0);
+  const cabinMat = new THREE.MeshStandardMaterial({
+    color: 0x081020,
+    roughness: 0.1,
+    metalness: 0.95
+  });
+  const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+  cabin.position.set(0, 0.78, -0.2);
+  carGroup.add(cabin);
+
+  // 3. 车头下压力铲 (Front Splitter)
+  const noseGeo = new THREE.BoxGeometry(1.9, 0.15, 0.8);
+  const noseMat = new THREE.MeshStandardMaterial({ color: 0x111624, metalness: 0.9 });
+  const nose = new THREE.Mesh(noseGeo, noseMat);
+  nose.position.set(0, 0.28, -2.2);
+  carGroup.add(nose);
+
+  // 4. 竞技大尾翼 (GT Wing)
+  const wingGroup = new THREE.Group();
+  wingGroup.position.set(0, 0.9, 1.8);
+  const spoilerMat = new THREE.MeshStandardMaterial({ color: 0x111624, metalness: 0.8 });
+  
+  // 尾翼板
+  const wingBladeGeo = new THREE.BoxGeometry(2.3, 0.08, 0.45);
+  const wingBladeMat = new THREE.MeshBasicMaterial({ color: primaryColor });
+  const wingBlade = new THREE.Mesh(wingBladeGeo, wingBladeMat);
+  wingBlade.position.y = 0.4;
+  wingGroup.add(wingBlade);
+
+  // 左右立柱
+  const postGeo = new THREE.BoxGeometry(0.08, 0.45, 0.2);
+  const p1 = new THREE.Mesh(postGeo, spoilerMat);
+  p1.position.set(-0.7, 0.2, 0);
+  wingGroup.add(p1);
+  const p2 = new THREE.Mesh(postGeo, spoilerMat);
+  p2.position.set(0.7, 0.2, 0);
+  wingGroup.add(p2);
+  carGroup.add(wingGroup);
+
+  // 5. 四只车轮 (带青色发光轮毂)
+  const wheels = [];
+  const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.35, 18);
+  wheelGeo.rotateZ(Math.PI / 2);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x15151e, roughness: 0.8 });
+  const rimMat = new THREE.MeshBasicMaterial({ color: primaryColor });
+
+  const wheelPositions = [
+    [-1.1, 0.42, -1.3], // 前左
+    [ 1.1, 0.42, -1.3], // 前右
+    [-1.15, 0.44, 1.3], // 后左
+    [ 1.15, 0.44, 1.3]  // 后右
+  ];
+
+  wheelPositions.forEach((pos, idx) => {
+    const wGroup = new THREE.Group();
+    wGroup.position.set(pos[0], pos[1], pos[2]);
+    const wMesh = new THREE.Mesh(wheelGeo, wheelMat);
+    wGroup.add(wMesh);
+
+    // 轮毂外圈霓虹灯
+    const rimGeo = new THREE.RingGeometry(0.2, 0.28, 12);
+    const rim = new THREE.Mesh(rimGeo, rimMat);
+    rim.position.x = pos[0] > 0 ? 0.18 : -0.18;
+    rim.rotation.y = pos[0] > 0 ? Math.PI / 2 : -Math.PI / 2;
+    wGroup.add(rim);
+
+    carGroup.add(wGroup);
+    wheels.push(wGroup);
+  });
+
+  // 6. 前大灯发光片
+  const headLightGeo = new THREE.BoxGeometry(0.35, 0.1, 0.1);
+  const headLightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const hlL = new THREE.Mesh(headLightGeo, headLightMat);
+  hlL.position.set(-0.7, 0.45, -2.15);
+  carGroup.add(hlL);
+  const hlR = new THREE.Mesh(headLightGeo, headLightMat);
+  hlR.position.set(0.7, 0.45, -2.15);
+  carGroup.add(hlR);
+
+  // 7. 尾部发光贯穿尾灯
+  const tailGeo = new THREE.BoxGeometry(1.8, 0.12, 0.1);
+  const tailMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
+  const tail = new THREE.Mesh(tailGeo, tailMat);
+  tail.position.set(0, 0.52, 2.18);
+  carGroup.add(tail);
+
+  // 8. 双氮气推进器尾喷口 (Thrusters)
+  const thrusters = [];
+  if (isPlayer) {
+    const flameGeo = new THREE.ConeGeometry(0.25, 2.2, 12);
+    flameGeo.rotateX(-Math.PI / 2);
+    const flameMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.0
+    });
+    
+    // 左喷管
+    const fL = new THREE.Mesh(flameGeo, flameMat);
+    fL.position.set(-0.5, 0.4, 3.2);
+    carGroup.add(fL);
+    thrusters.push(fL);
+
+    // 右喷管
+    const fR = new THREE.Mesh(flameGeo, flameMat.clone());
+    fR.material.color.setHex(0xd000ff);
+    fR.position.set(0.5, 0.4, 3.2);
+    carGroup.add(fR);
+    thrusters.push(fR);
+  }
+
+  return { group: carGroup, wheels, thrusters };
 }
 
-function burst(x, y, color, count = 12) {
-  for (let index = 0; index < count; index++) {
+// 实例化玩家赛车
+const player = createSuperCar(true, 0x00f3ff);
+scene.add(player.group);
+player.group.position.set(0, 0, 0);
+
+// 玩家赛车物理状态
+const carState = {
+  x: 0,
+  z: 0,
+  velocityX: 0,
+  steering: 0,
+  roll: 0,
+  yaw: 0
+};
+
+// ═══════════════════════════════════════
+// 敌车系统 (Traffic)
+// ═══════════════════════════════════════
+const traffic = [];
+const trafficColors = [0xff2255, 0xffea00, 0xa020f0, 0x00ff88, 0xff7700];
+
+function spawnTraffic() {
+  const laneIndex = Math.floor(Math.random() * LANE_COUNT);
+  const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
+  const color = trafficColors[Math.floor(Math.random() * trafficColors.length)];
+  const enemy = createSuperCar(false, color);
+  
+  enemy.group.position.set(laneX, 0, -180);
+  enemy.speed = 0.35 + Math.random() * 0.4;
+  enemy.width = 2.2;
+  enemy.length = 4.4;
+
+  scene.add(enemy.group);
+  traffic.push(enemy);
+}
+
+// ═══════════════════════════════════════
+// 3D 浮空能量金币 (Energy Coins)
+// ═══════════════════════════════════════
+const coins = [];
+const coinGeo = new THREE.CylinderGeometry(0.85, 0.85, 0.22, 16);
+coinGeo.rotateX(Math.PI / 2);
+const coinMat = new THREE.MeshStandardMaterial({
+  color: 0xffd700,
+  roughness: 0.2,
+  metalness: 0.9,
+  emissive: 0xffaa00,
+  emissiveIntensity: 0.5
+});
+
+function spawnCoin() {
+  const laneIndex = Math.floor(Math.random() * LANE_COUNT);
+  const laneX = -ROAD_WIDTH / 2 + laneIndex * LANE_WIDTH + LANE_WIDTH / 2;
+  const coinMesh = new THREE.Mesh(coinGeo, coinMat);
+  coinMesh.position.set(laneX, 0.9, -210);
+  scene.add(coinMesh);
+  coins.push(coinMesh);
+}
+
+// ═══════════════════════════════════════
+// 尾部火焰粒子与撞击火花
+// ═══════════════════════════════════════
+const particles = [];
+const pGeo = new THREE.SphereGeometry(0.12, 6, 6);
+
+function createSpark(x, y, z, colorHex, count = 15) {
+  for (let i = 0; i < count; i++) {
+    const pMat = new THREE.MeshBasicMaterial({ color: colorHex });
+    const pMesh = new THREE.Mesh(pGeo, pMat);
+    pMesh.position.set(x, y, z);
+    scene.add(pMesh);
     particles.push({
-      x, y,
-      velocityX: (Math.random() - .5) * 7,
-      velocityY: (Math.random() - .5) * 7,
-      life: 1,
-      radius: Math.random() * 4 + 2,
-      color
+      mesh: pMesh,
+      vx: (Math.random() - 0.5) * 0.8,
+      vy: Math.random() * 0.6 + 0.1,
+      vz: (Math.random() - 0.5) * 0.8,
+      life: 1.0
     });
   }
 }
 
-function laneX(lane, objectWidth) {
-  return roadLeft + laneWidth * lane + laneWidth / 2 - objectWidth / 2;
+// ═══════════════════════════════════════
+// 游戏开始与重置
+// ═══════════════════════════════════════
+function resetGame() {
+  traffic.forEach(t => scene.remove(t.group));
+  traffic.length = 0;
+
+  coins.forEach(c => scene.remove(c));
+  coins.length = 0;
+
+  particles.forEach(p => scene.remove(p.mesh));
+  particles.length = 0;
+
+  score = 0;
+  nitro = 100;
+  baseSpeed = 1.0;
+  frame = 0;
+  carState.x = 0;
+  carState.velocityX = 0;
+  player.group.position.set(0, 0, 0);
+  player.group.rotation.set(0, 0, 0);
+
+  scoreEl.textContent = "0";
+  nitroBar.style.width = "100%";
 }
 
-function spawn() {
-  const lane = Math.floor(Math.random() * 4);
-  const enemyWidth = 50 + Math.random() * 10;
-  const enemyHeight = 82 + Math.random() * 16;
-  traffic.push({
-    x: laneX(lane, enemyWidth),
-    y: -130,
-    width: enemyWidth,
-    height: enemyHeight,
-    color: `hsl(${Math.random() * 360} 85% 62%)`,
-    speed: Math.random() * 2,
-    type: Math.floor(Math.random() * 3) // 0: Sports, 1: Truck, 2: Sedan
-  });
-  if (Math.random() > .42) {
-    const coinLane = Math.floor(Math.random() * 4);
-    coins.push({ x: laneX(coinLane, 22) + 11, y: -190, radius: 11, spin: 0 });
-  }
+function startGame() {
+  playerName = playerNameInput.value.trim() || "极速车神";
+  localStorage.setItem("neonRacerName", playerName);
+  resetGame();
+  running = true;
+  overlay.classList.add("hidden");
 }
 
-function hit(first, second, padding = 8) {
-  return first.x + padding < second.x + second.width &&
-    first.x + first.width - padding > second.x &&
-    first.y + padding < second.y + second.height &&
-    first.y + first.height - padding > second.y;
-}
-
-async function end() {
+async function endGame() {
   running = false;
   const finalScore = Math.floor(score);
   best = Math.max(best, finalScore);
   localStorage.setItem("neonRushBest", best);
   bestEl.textContent = best;
   title.textContent = "CRASHED";
-  message.innerHTML = `本局得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>成绩正在提交到服务器排行榜。`;
+  message.innerHTML = `本次竞速得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>成绩正在提交服务器...`;
   document.querySelector("#start").textContent = "再来一局";
   overlay.classList.remove("hidden");
+
+  // 车辆撞毁飞起特效
+  player.group.rotation.x = 0.5;
+  player.group.position.y = 1.5;
+  createSpark(player.group.position.x, 1.0, player.group.position.z, 0xff0044, 40);
+
   try {
     await api.post("/api/scores", { name: playerName, score: finalScore });
-    message.innerHTML = `本局得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>成绩已提交，排行榜已刷新。`;
+    message.innerHTML = `本次竞速得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>成绩已收录至排行榜！`;
     await loadLeaderboard();
   } catch (error) {
-    message.innerHTML = `本局得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>服务器暂时不可用，本机成绩已保存。`;
+    message.innerHTML = `本次竞速得分：<b style="color:#61efff;font-size:24px">${finalScore}</b><br>服务器离线，已保存至本机最佳。`;
     setServerState(false);
   }
 }
 
+// ═══════════════════════════════════════
+// 游戏主逻辑每帧更新
+// ═══════════════════════════════════════
 function update() {
   if (!running) return;
   frame++;
+
+  // 1. 速度与氮气 (NITRO)
   const accelerating = keys.KeyW || keys.ArrowUp;
   boosting = (keys.Space || keys.boost) && nitro > 0;
-  nitro = boosting ? Math.max(0, nitro - .8) : Math.min(100, nitro + .13);
-  const targetSpeed = accelerating ? 9 : 5;
-  baseSpeed += (targetSpeed - baseSpeed) * .035;
-  const speed = baseSpeed + (boosting ? 5 : 0);
-  score += speed * .025;
-  roadOffset = (roadOffset + speed) % 80;
+  nitro = boosting ? Math.max(0, nitro - 0.7) : Math.min(100, nitro + 0.12);
 
-  if (keys.ArrowLeft || keys.KeyA || keys.left) car.velocityX -= 1.15;
-  if (keys.ArrowRight || keys.KeyD || keys.right) car.velocityX += 1.15;
-  car.velocityX *= .84;
-  car.x += car.velocityX;
-  car.x = Math.max(roadLeft + 8, Math.min(roadRight - car.width - 8, car.x));
+  const targetSpeed = accelerating ? 1.4 : 1.0;
+  baseSpeed += (targetSpeed - baseSpeed) * 0.05;
+  currentSpeed = baseSpeed + (boosting ? 0.9 : 0);
 
-  // Exhaust flame particles and tire sparks for the player car
-  if (running) {
-    if (boosting) {
-      for (let i = 0; i < 2; i++) {
-        // Left exhaust
-        particles.push({
-          x: car.x + car.width / 2 - 14 + (Math.random() - 0.5) * 4,
-          y: car.y + car.height - 4 + Math.random() * 4,
-          velocityX: (Math.random() - 0.5) * 2 - car.velocityX * 0.1,
-          velocityY: Math.random() * 3 + 6 + speed * 0.15,
-          life: 1,
-          radius: Math.random() * 4 + 3,
-          color: `hsl(${190 + Math.random() * 30} 100% 70%)` // Cyan/Blue
-        });
-        // Right exhaust
-        particles.push({
-          x: car.x + car.width / 2 + 14 + (Math.random() - 0.5) * 4,
-          y: car.y + car.height - 4 + Math.random() * 4,
-          velocityX: (Math.random() - 0.5) * 2 - car.velocityX * 0.1,
-          velocityY: Math.random() * 3 + 6 + speed * 0.15,
-          life: 1,
-          radius: Math.random() * 4 + 3,
-          color: `hsl(${270 + Math.random() * 30} 100% 65%)` // Purple/Magenta
-        });
-      }
-      // Faint fire sparks
-      if (Math.random() < 0.3) {
-        particles.push({
-          x: car.x + car.width / 2 + (Math.random() - 0.5) * 20,
-          y: car.y + car.height + 4,
-          velocityX: (Math.random() - 0.5) * 4,
-          velocityY: Math.random() * 2 + 2,
-          life: 0.8,
-          radius: Math.random() * 2 + 1,
-          color: "#ffffff"
-        });
-      }
-    } else if (frame % 3 === 0) {
-      // Normal engine smoke
-      particles.push({
-        x: car.x + car.width / 2 - 14 + (Math.random() - 0.5) * 2,
-        y: car.y + car.height + 2,
-        velocityX: (Math.random() - 0.5) * 0.8,
-        velocityY: Math.random() * 1.5 + 1.5,
-        life: 0.6,
-        radius: Math.random() * 2 + 1,
-        color: "rgba(255, 255, 255, 0.18)"
-      });
-      particles.push({
-        x: car.x + car.width / 2 + 14 + (Math.random() - 0.5) * 2,
-        y: car.y + car.height + 2,
-        velocityX: (Math.random() - 0.5) * 0.8,
-        velocityY: Math.random() * 1.5 + 1.5,
-        life: 0.6,
-        radius: Math.random() * 2 + 1,
-        color: "rgba(255, 255, 255, 0.18)"
-      });
-    }
-
-    // Tire drift tracks and sparks on sharp turns
-    if (Math.abs(car.velocityX) > 2.2 && Math.random() < 0.4) {
-      // Left tire drift spark
-      particles.push({
-        x: car.x + 4,
-        y: car.y + car.height - 10,
-        velocityX: -car.velocityX * 0.3 + (Math.random() - 0.5) * 1.5,
-        velocityY: Math.random() * 1.5 + 1,
-        life: 0.7,
-        radius: Math.random() * 2.5 + 1,
-        color: "rgba(98, 239, 255, 0.45)"
-      });
-      // Right tire drift spark
-      particles.push({
-        x: car.x + car.width - 4,
-        y: car.y + car.height - 10,
-        velocityX: -car.velocityX * 0.3 + (Math.random() - 0.5) * 1.5,
-        velocityY: Math.random() * 1.5 + 1,
-        life: 0.7,
-        radius: Math.random() * 2.5 + 1,
-        color: "rgba(98, 239, 255, 0.45)"
-      });
-    }
-  }
-
-  // Update speed lines during boost
-  if (boosting) {
-    speedLines.forEach(line => {
-      line.y += line.speed + speed * 1.2;
-      if (line.y > height) {
-        resetSpeedLine(line);
-      }
-    });
-  }
-
-  if (frame % Math.max(48, Math.floor(94 - baseSpeed * 2.1)) === 0) spawn();
-  traffic.forEach(enemy => enemy.y += speed - enemy.speed);
-  coins.forEach(coin => { coin.y += speed; coin.spin += .12; });
-  particles.forEach(particle => {
-    particle.x += particle.velocityX;
-    particle.y += particle.velocityY;
-    particle.life -= .03;
-  });
-
-  for (const enemy of traffic) {
-    if (hit(car, enemy)) {
-      burst(car.x + car.width / 2, car.y + car.height / 2, "#ff4c72", 35);
-      return end();
-    }
-  }
-
-  coins = coins.filter(coin => {
-    const collected = Math.hypot(car.x + car.width / 2 - coin.x, car.y + car.height / 2 - coin.y) < 42;
-    if (collected) {
-      score += 35;
-      nitro = Math.min(100, nitro + 18);
-      burst(coin.x, coin.y, "#ffe76b", 16);
-    }
-    return !collected && coin.y < height + 40;
-  });
-
-  traffic = traffic.filter(enemy => enemy.y < height + 150);
-  particles = particles.filter(particle => particle.life > 0);
-  scoreEl.textContent = Math.floor(score);
-  speedEl.textContent = Math.floor(speed * 18);
+  score += currentSpeed * 0.45;
   nitroBar.style.width = `${nitro}%`;
-}
+  scoreEl.textContent = Math.floor(score);
+  speedEl.textContent = Math.floor(currentSpeed * 125); // KM/H 仪表显示
 
-function drawBackground() {
-  const gradient = ctx.createLinearGradient(0, 0, 0, height);
-  gradient.addColorStop(0, "#070719");
-  gradient.addColorStop(1, "#1b0c38");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
+  // 2. 玩家赛车横向控制与 QQ飞车侧倾 (Roll & Yaw)
+  const turnLeft = keys.ArrowLeft || keys.KeyA || keys.left;
+  const turnRight = keys.ArrowRight || keys.KeyD || keys.right;
 
-  stars.forEach(star => {
-    star.y += running ? baseSpeed * .08 : .08;
-    if (star.y > height) star.y = 0;
-    ctx.globalAlpha = star.alpha;
-    ctx.fillStyle = "#bbedff";
-    
-    // Stretch stars into speed lines when boosting
-    if (boosting) {
-      ctx.beginPath();
-      ctx.moveTo(star.x, star.y);
-      ctx.lineTo(star.x, star.y + star.radius * 7);
-      ctx.lineWidth = star.radius * 0.8;
-      ctx.strokeStyle = "#bbedff";
-      ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  if (turnLeft) carState.velocityX -= 0.045;
+  if (turnRight) carState.velocityX += 0.045;
+  carState.velocityX *= 0.88; // 阻尼
+  carState.x += carState.velocityX * 10;
+
+  // 赛道边缘限制
+  const maxBound = ROAD_WIDTH / 2 - 1.8;
+  if (carState.x < -maxBound) {
+    carState.x = -maxBound;
+    carState.velocityX = 0;
+  }
+  if (carState.x > maxBound) {
+    carState.x = maxBound;
+    carState.velocityX = 0;
+  }
+
+  // 飞车车身侧倾角度 (漂移动态)
+  carState.roll = -carState.velocityX * 1.8;
+  carState.yaw = -carState.velocityX * 0.9;
+  player.group.position.x = carState.x;
+  player.group.rotation.z = carState.roll;
+  player.group.rotation.y = carState.yaw;
+
+  // 转向前轮打角
+  const steerAngle = Math.max(-0.4, Math.min(0.4, carState.velocityX * 3.5));
+  player.wheels[0].rotation.y = steerAngle;
+  player.wheels[1].rotation.y = steerAngle;
+
+  // 四轮高速滚转
+  const wheelSpin = currentSpeed * 0.6;
+  player.wheels.forEach(w => {
+    w.children[0].rotation.x += wheelSpin;
   });
-  ctx.globalAlpha = 1;
 
-  // Draw full-screen speed lines when boosting
+  // 3. 氮气推进火焰动画
   if (boosting) {
-    ctx.save();
-    ctx.lineWidth = 1.2;
-    speedLines.forEach(line => {
-      ctx.strokeStyle = `rgba(98, 239, 255, ${line.alpha})`;
-      ctx.beginPath();
-      ctx.moveTo(line.x, line.y);
-      ctx.lineTo(line.x, line.y + line.length);
-      ctx.stroke();
-    });
-    ctx.restore();
-  }
+    const pulse = 1.0 + Math.random() * 0.4;
+    player.thrusters[0].material.opacity = 0.85;
+    player.thrusters[1].material.opacity = 0.85;
+    player.thrusters[0].scale.set(pulse, pulse * 1.2, pulse);
+    player.thrusters[1].scale.set(pulse, pulse * 1.2, pulse);
 
-  ctx.shadowBlur = 28;
-  ctx.shadowColor = "#d742ff";
-  ctx.fillStyle = "#151526";
-  ctx.fillRect(roadLeft, 0, roadRight - roadLeft, height);
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = "#ff4bd8";
-  ctx.fillRect(roadLeft - 4, 0, 4, height);
-  ctx.fillStyle = "#48efff";
-  ctx.fillRect(roadRight, 0, 4, height);
-
-  ctx.strokeStyle = "#ffffff36";
-  ctx.lineWidth = 5;
-  ctx.setLineDash([38, 42]);
-  ctx.lineDashOffset = roadOffset;
-  for (let lane = 1; lane < 4; lane++) {
-    ctx.beginPath();
-    ctx.moveTo(roadLeft + laneWidth * lane, 0);
-    ctx.lineTo(roadLeft + laneWidth * lane, height);
-    ctx.stroke();
-  }
-  ctx.setLineDash([]);
-
-  for (let y = -80 + roadOffset; y < height; y += 80) {
-    ctx.fillStyle = "#d349ff";
-    ctx.fillRect(roadLeft - 24, y, 11, 36);
-    ctx.fillStyle = "#43efff";
-    ctx.fillRect(roadRight + 13, y, 11, 36);
-  }
-}
-
-function drawCar(vehicle, player = false) {
-  ctx.save();
-  
-  // Calculate tilt angle based on horizontal velocity (only for player)
-  let tiltAngle = player ? vehicle.velocityX * 0.012 : 0;
-  
-  // Translate to vehicle center and rotate for body tilt
-  ctx.translate(vehicle.x + vehicle.width / 2, vehicle.y + vehicle.height / 2);
-  ctx.rotate(tiltAngle);
-
-  // 1. NEON UNDERGLOW
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  ctx.fillStyle = player ? "#5ceeff" : vehicle.color;
-  ctx.shadowBlur = 25;
-  ctx.shadowColor = player ? "#5ceeff" : vehicle.color;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, vehicle.width * 0.7, vehicle.height * 0.55, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  // 2. WHEELS (Draw 4 tires)
-  const wheelW = 10;
-  const wheelH = 20;
-  const wheelColor = "#0f111a";
-  const rimColor = player ? "#5ceeff" : vehicle.color;
-  
-  // Rear Wheels (facing straight)
-  ctx.fillStyle = wheelColor;
-  ctx.strokeStyle = rimColor;
-  ctx.lineWidth = 2;
-  
-  // Rear-Left Wheel
-  ctx.beginPath();
-  ctx.roundRect(-vehicle.width / 2 - 4, vehicle.height * 0.18 - wheelH / 2, wheelW, wheelH, 4);
-  ctx.fill();
-  ctx.stroke();
-  
-  // Rear-Right Wheel
-  ctx.beginPath();
-  ctx.roundRect(vehicle.width / 2 - wheelW + 4, vehicle.height * 0.18 - wheelH / 2, wheelW, wheelH, 4);
-  ctx.fill();
-  ctx.stroke();
-
-  // Front Wheels (Steerable for player)
-  ctx.save();
-  let steerAngle = player ? Math.max(-0.25, Math.min(0.25, vehicle.velocityX * 0.05)) : 0;
-  
-  // Front-Left Wheel
-  ctx.save();
-  ctx.translate(-vehicle.width / 2 + wheelW / 2 - 4, -vehicle.height * 0.25);
-  ctx.rotate(steerAngle);
-  ctx.beginPath();
-  ctx.roundRect(-wheelW / 2, -wheelH / 2, wheelW, wheelH, 4);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-  
-  // Front-Right Wheel
-  ctx.save();
-  ctx.translate(vehicle.width / 2 - wheelW / 2 + 4, -vehicle.height * 0.25);
-  ctx.rotate(steerAngle);
-  ctx.beginPath();
-  ctx.roundRect(-wheelW / 2, -wheelH / 2, wheelW, wheelH, 4);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-  
-  ctx.restore(); // end wheels
-
-  // 3. BODY DRAWING
-  if (player) {
-    // ---- PLAYER SUPER CAR ----
-    // Gradient for player body
-    let bodyGrad = ctx.createLinearGradient(0, -vehicle.height / 2, 0, vehicle.height / 2);
-    bodyGrad.addColorStop(0, "#ffffff");
-    bodyGrad.addColorStop(0.2, "#3ce9ff");
-    bodyGrad.addColorStop(0.8, "#1a1235");
-    bodyGrad.addColorStop(1, "#0d0620");
-    ctx.fillStyle = bodyGrad;
-    
-    // Cyberpunk sports car shape path
-    ctx.beginPath();
-    ctx.moveTo(0, -vehicle.height * 0.52); // Front center nose
-    ctx.lineTo(vehicle.width * 0.32, -vehicle.height * 0.42); // Front-Right headlight corner
-    ctx.lineTo(vehicle.width * 0.44, -vehicle.height * 0.22); // Front-Right fender
-    ctx.lineTo(vehicle.width * 0.42, 0); // Cabin side right
-    ctx.lineTo(vehicle.width * 0.5, vehicle.height * 0.32); // Rear-Right wheel arch
-    ctx.lineTo(vehicle.width * 0.48, vehicle.height * 0.46); // Rear wing right tip
-    ctx.lineTo(vehicle.width * 0.25, vehicle.height * 0.44); // Rear spoiler inside right
-    ctx.lineTo(0, vehicle.height * 0.40); // Rear center exhaust area
-    ctx.lineTo(-vehicle.width * 0.25, vehicle.height * 0.44); // Rear spoiler inside left
-    ctx.lineTo(-vehicle.width * 0.48, vehicle.height * 0.46); // Rear wing left tip
-    ctx.lineTo(-vehicle.width * 0.5, vehicle.height * 0.32); // Rear-Left wheel arch
-    ctx.lineTo(-vehicle.width * 0.42, 0); // Cabin side left
-    ctx.lineTo(-vehicle.width * 0.44, -vehicle.height * 0.22); // Front-Left fender
-    ctx.lineTo(-vehicle.width * 0.32, -vehicle.height * 0.42); // Front-Left headlight corner
-    ctx.closePath();
-    
-    ctx.save();
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = "#3ce9ff";
-    ctx.fill();
-    ctx.restore();
-
-    // Body Neon Accents/Stripe
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-vehicle.width * 0.15, -vehicle.height * 0.35);
-    ctx.lineTo(0, -vehicle.height * 0.45);
-    ctx.lineTo(vehicle.width * 0.15, -vehicle.height * 0.35);
-    ctx.stroke();
-
-    // Windshield & Cabin Glass
-    let glassGrad = ctx.createLinearGradient(0, -vehicle.height * 0.15, 0, vehicle.height * 0.15);
-    glassGrad.addColorStop(0, "#081026");
-    glassGrad.addColorStop(0.5, "#15335e");
-    glassGrad.addColorStop(1, "#3690b5");
-    ctx.fillStyle = glassGrad;
-    ctx.beginPath();
-    ctx.roundRect(-vehicle.width * 0.24, -vehicle.height * 0.16, vehicle.width * 0.48, vehicle.height * 0.32, [8, 8, 4, 4]);
-    ctx.fill();
-    // Glass highlight shine
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(-vehicle.width * 0.15, -vehicle.height * 0.12);
-    ctx.lineTo(vehicle.width * 0.1, vehicle.height * 0.12);
-    ctx.stroke();
-
-    // Headlights (LED Yellow/Cyan dots)
-    ctx.fillStyle = "#fff16b";
-    ctx.fillRect(-vehicle.width * 0.28, -vehicle.height * 0.44, 7, 4);
-    ctx.fillRect(vehicle.width * 0.28 - 7, -vehicle.height * 0.44, 7, 4);
-
-    // Taillights (Red neon stripe at the spoiler base)
-    ctx.strokeStyle = "#ff2255";
-    ctx.lineWidth = 3;
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = "#ff2255";
-    ctx.beginPath();
-    ctx.moveTo(-vehicle.width * 0.32, vehicle.height * 0.41);
-    ctx.lineTo(vehicle.width * 0.32, vehicle.height * 0.41);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Headlight Beams (Draw 2 cones of light projecting forward)
-    ctx.save();
-    let beamGrad = ctx.createLinearGradient(0, -vehicle.height / 2, 0, -vehicle.height / 2 - 140);
-    beamGrad.addColorStop(0, "rgba(98, 239, 255, 0.35)");
-    beamGrad.addColorStop(1, "rgba(98, 239, 255, 0)");
-    ctx.fillStyle = beamGrad;
-    
-    // Left beam
-    ctx.beginPath();
-    ctx.moveTo(-vehicle.width * 0.25, -vehicle.height * 0.45);
-    ctx.lineTo(-vehicle.width * 0.25 - 30, -vehicle.height * 0.45 - 140);
-    ctx.lineTo(-vehicle.width * 0.25 + 30, -vehicle.height * 0.45 - 140);
-    ctx.closePath();
-    ctx.fill();
-
-    // Right beam
-    ctx.beginPath();
-    ctx.moveTo(vehicle.width * 0.25, -vehicle.height * 0.45);
-    ctx.lineTo(vehicle.width * 0.25 - 30, -vehicle.height * 0.45 - 140);
-    ctx.lineTo(vehicle.width * 0.25 + 30, -vehicle.height * 0.45 - 140);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
+    // 喷射粒子
+    if (frame % 2 === 0) {
+      createSpark(carState.x - 0.5, 0.4, 2.8, 0x00f3ff, 2);
+      createSpark(carState.x + 0.5, 0.4, 2.8, 0xd000ff, 2);
+    }
+    streakMat.opacity = Math.min(0.8, streakMat.opacity + 0.1);
   } else {
-    // ---- TRAFFIC VEHICLES ----
-    // Select styling based on type: 0 = Sports, 1 = Cyber-truck, 2 = Sedan
-    let type = vehicle.type !== undefined ? vehicle.type : 0;
-    
-    ctx.fillStyle = vehicle.color;
-    
-    if (type === 1) {
-      // Cyber Truck (Boxy, armored look)
-      ctx.beginPath();
-      ctx.roundRect(-vehicle.width / 2, -vehicle.height / 2, vehicle.width, vehicle.height, 4);
-      ctx.fill();
-      
-      // Cyber Truck cabin line
-      ctx.fillStyle = "#111422";
-      ctx.beginPath();
-      ctx.roundRect(-vehicle.width * 0.38, -vehicle.height * 0.2, vehicle.width * 0.76, vehicle.height * 0.36, 2);
-      ctx.fill();
+    player.thrusters[0].material.opacity = 0;
+    player.thrusters[1].material.opacity = 0;
+    streakMat.opacity = Math.max(0, streakMat.opacity - 0.08);
+  }
 
-      // Horizontal bright light strip (front and back)
-      ctx.strokeStyle = "#fff16b";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(-vehicle.width * 0.42, -vehicle.height * 0.46);
-      ctx.lineTo(vehicle.width * 0.42, -vehicle.height * 0.46);
-      ctx.stroke();
+  // 4. 赛道与建筑无限循环向后流转
+  const moveZ = currentSpeed * 1.8;
+  roadSegments.forEach(seg => {
+    seg.position.z += moveZ;
+    if (seg.position.z > ROAD_SEGMENT_LENGTH) {
+      seg.position.z -= TOTAL_ROAD_LEN;
+    }
+  });
 
-      ctx.strokeStyle = "#ff2255";
-      ctx.beginPath();
-      ctx.moveTo(-vehicle.width * 0.42, vehicle.height * 0.46);
-      ctx.lineTo(vehicle.width * 0.42, vehicle.height * 0.46);
-      ctx.stroke();
+  buildings.forEach(b => {
+    b.position.z += moveZ * 0.75;
+    if (b.position.z > 20) {
+      b.position.z -= TOTAL_ROAD_LEN;
+    }
+  });
 
-    } else if (type === 2) {
-      // Futuristic Sedan (Sleek, rounded curves)
-      ctx.beginPath();
-      ctx.roundRect(-vehicle.width / 2, -vehicle.height / 2, vehicle.width, vehicle.height, 14);
-      ctx.fill();
+  // 5. 敌车生成与运动
+  if (frame % Math.max(45, Math.floor(90 - currentSpeed * 15)) === 0) {
+    spawnTraffic();
+  }
+  if (Math.random() < 0.035) {
+    spawnCoin();
+  }
 
-      // Rounded windshield and back window
-      ctx.fillStyle = "#0a0a14";
-      ctx.beginPath();
-      ctx.roundRect(-vehicle.width * 0.32, -vehicle.height * 0.25, vehicle.width * 0.64, vehicle.height * 0.45, 6);
-      ctx.fill();
-      
-      // Headlights (Cyan dots)
-      ctx.fillStyle = "#fff16b";
-      ctx.fillRect(-vehicle.width * 0.28, -vehicle.height * 0.46, 6, 4);
-      ctx.fillRect(vehicle.width * 0.28 - 6, -vehicle.height * 0.46, 6, 4);
+  for (let i = traffic.length - 1; i >= 0; i--) {
+    const enemy = traffic[i];
+    enemy.group.position.z += moveZ - enemy.speed * 1.4;
+    enemy.wheels.forEach(w => { w.children[0].rotation.x += 0.3; });
 
-      // Taillights
-      ctx.fillStyle = "#ff2255";
-      ctx.fillRect(-vehicle.width * 0.32, vehicle.height * 0.42, 8, 4);
-      ctx.fillRect(vehicle.width * 0.32 - 8, vehicle.height * 0.42, 8, 4);
-    } else {
-      // Sports Car (Sleek aerodynamic corners)
-      ctx.beginPath();
-      ctx.moveTo(0, -vehicle.height * 0.5);
-      ctx.lineTo(vehicle.width * 0.45, -vehicle.height * 0.38);
-      ctx.lineTo(vehicle.width * 0.45, vehicle.height * 0.38);
-      ctx.lineTo(vehicle.width * 0.35, vehicle.height * 0.46);
-      ctx.lineTo(-vehicle.width * 0.35, vehicle.height * 0.46);
-      ctx.lineTo(-vehicle.width * 0.45, vehicle.height * 0.38);
-      ctx.lineTo(-vehicle.width * 0.45, -vehicle.height * 0.38);
-      ctx.closePath();
-      ctx.fill();
+    // 碰撞检测 (3D AABB 盒)
+    const pPos = player.group.position;
+    const ePos = enemy.group.position;
+    const dx = Math.abs(pPos.x - ePos.x);
+    const dz = Math.abs(pPos.z - ePos.z);
 
-      // Spoiler at rear
-      ctx.fillStyle = "#0c0d14";
-      ctx.fillRect(-vehicle.width * 0.4, vehicle.height * 0.4, vehicle.width * 0.8, 5);
+    if (dx < 1.9 && dz < 3.8) {
+      return endGame();
+    }
 
-      // Cabin glass
-      ctx.fillStyle = "#0a0c16";
-      ctx.beginPath();
-      ctx.roundRect(-vehicle.width * 0.26, -vehicle.height * 0.18, vehicle.width * 0.52, vehicle.height * 0.35, 4);
-      ctx.fill();
-
-      // Lights
-      ctx.fillStyle = "#fff16b";
-      ctx.fillRect(-vehicle.width * 0.3, -vehicle.height * 0.42, 6, 4);
-      ctx.fillRect(vehicle.width * 0.3 - 6, -vehicle.height * 0.42, 6, 4);
-
-      ctx.fillStyle = "#ff2255";
-      ctx.fillRect(-vehicle.width * 0.35, vehicle.height * 0.38, 7, 4);
-      ctx.fillRect(vehicle.width * 0.35 - 7, vehicle.height * 0.38, 7, 4);
+    // 超出屏幕后移除
+    if (enemy.group.position.z > 25) {
+      scene.remove(enemy.group);
+      traffic.splice(i, 1);
     }
   }
 
-  ctx.restore();
+  // 6. 金币收集检测
+  for (let i = coins.length - 1; i >= 0; i--) {
+    const coin = coins[i];
+    coin.position.z += moveZ;
+    coin.rotation.z += 0.05;
+
+    const dx = Math.abs(player.group.position.x - coin.position.x);
+    const dz = Math.abs(player.group.position.z - coin.position.z);
+
+    if (dx < 2.0 && dz < 2.5) {
+      score += 50;
+      nitro = Math.min(100, nitro + 25);
+      createSpark(coin.position.x, 1.0, coin.position.z, 0xffd700, 15);
+      scene.remove(coin);
+      coins.splice(i, 1);
+    } else if (coin.position.z > 25) {
+      scene.remove(coin);
+      coins.splice(i, 1);
+    }
+  }
+
+  // 7. 粒子更新
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.mesh.position.x += p.vx;
+    p.mesh.position.y += p.vy;
+    p.mesh.position.z += p.vz;
+    p.life -= 0.04;
+    p.mesh.scale.setScalar(p.life);
+    if (p.life <= 0) {
+      scene.remove(p.mesh);
+      particles.splice(i, 1);
+    }
+  }
+
+  // 8. QQ飞车式 第三人称跟车视角 (Smooth Chase Camera)
+  const targetCamX = carState.x * 0.72;
+  const targetCamY = boosting ? 3.4 : 3.6;
+  const targetCamZ = boosting ? 8.6 : 8.0;
+
+  camera.position.x += (targetCamX - camera.position.x) * 0.12;
+  camera.position.y += (targetCamY - camera.position.y) * 0.1;
+  camera.position.z += (targetCamZ - camera.position.z) * 0.1;
+
+  // 开启氮气时 FOV 广角推背感 (大喷拉伸镜头)
+  const targetFov = boosting ? 76 : 60;
+  camera.fov += (targetFov - camera.fov) * 0.08;
+  camera.updateProjectionMatrix();
+
+  camera.lookAt(carState.x * 0.45, 1.2, -18);
+  playerLight.position.set(carState.x, 2, 2);
 }
 
-function draw() {
-  drawBackground();
-  coins.forEach(coin => {
-    ctx.save();
-    ctx.translate(coin.x, coin.y);
-    ctx.scale(Math.abs(Math.cos(coin.spin)) + .15, 1);
-    ctx.shadowBlur = 22;
-    ctx.shadowColor = "#ffe66a";
-    ctx.fillStyle = "#ffe66a";
-    ctx.beginPath();
-    ctx.arc(0, 0, coin.radius, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Draw inner neon border and details
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = "#080b18";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, coin.radius * 0.6, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Draw "C" in center
-    ctx.fillStyle = "#080b18";
-    ctx.font = "bold 11px Rajdhani, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("C", 0, 0);
-    
-    ctx.restore();
-  });
-  traffic.forEach(enemy => drawCar(enemy));
-  particles.forEach(particle => {
-    ctx.globalAlpha = particle.life;
-    ctx.fillStyle = particle.color;
-    ctx.beginPath();
-    ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
-    ctx.fill();
-  });
-  ctx.globalAlpha = 1;
-  drawCar(car, true);
-}
-
-function loop() {
+// ═══════════════════════════════════════
+// 渲染循环
+// ═══════════════════════════════════════
+function render() {
   update();
-  draw();
-  requestAnimationFrame(loop);
+  renderer.render(scene, camera);
+  requestAnimationFrame(render);
 }
 
+// ═══════════════════════════════════════
+// 排行榜与服务器状态对接
+// ═══════════════════════════════════════
 function setServerState(online) {
   serverDot.classList.toggle("online", online);
   serverDot.classList.toggle("offline", !online);
-  serverText.textContent = online ? "服务器在线" : "服务器离线";
+  serverText.textContent = online ? "服务器在线" : "单机模式";
 }
 
 function renderLeaderboard(scores) {
   if (!scores.length) {
-    leaderboardList.innerHTML = "<li>暂无成绩，快来跑第一局。</li>";
+    leaderboardList.innerHTML = "<li>暂无战绩，等你来破纪录！</li>";
     return;
   }
   leaderboardList.innerHTML = scores.map((item, index) => (
@@ -732,10 +728,13 @@ async function loadLeaderboard() {
     renderLeaderboard(data.scores || []);
   } catch (error) {
     setServerState(false);
-    leaderboardList.innerHTML = "<li>服务器未连接，当前只能保存本机最佳成绩。</li>";
+    leaderboardList.innerHTML = "<li>服务器未连上，本地纪录有效。</li>";
   }
 }
 
+// ═══════════════════════════════════════
+// 事件绑定 (键盘 + 触屏)
+// ═══════════════════════════════════════
 function bindButton(selector, key) {
   const element = document.querySelector(selector);
   element.addEventListener("pointerdown", event => {
@@ -747,17 +746,29 @@ function bindButton(selector, key) {
   });
 }
 
-addEventListener("keydown", event => {
+window.addEventListener("keydown", event => {
   keys[event.code] = true;
-  if (["ArrowLeft", "ArrowRight", "ArrowUp", "Space"].includes(event.code)) event.preventDefault();
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "Space"].includes(event.code)) {
+    event.preventDefault();
+  }
 });
-addEventListener("keyup", event => { keys[event.code] = false; });
-addEventListener("resize", resize);
+
+window.addEventListener("keyup", event => {
+  keys[event.code] = false;
+});
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
 bindButton("#left", "left");
 bindButton("#right", "right");
 bindButton("#boost", "boost");
-document.querySelector("#start").addEventListener("click", start);
+document.querySelector("#start").addEventListener("click", startGame);
 refreshRanks.addEventListener("click", loadLeaderboard);
-resize();
+
+// 启动
 loadLeaderboard();
-loop();
+render();

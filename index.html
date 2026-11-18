@@ -3,19 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <title>Neon Racer</title>
+  <title>Neon Racer 3D - 极速飞车</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
-  <canvas id="game" aria-label="霓虹赛车游戏画布"></canvas>
+  <!-- 3D WebGL Canvas -->
+  <div id="game-container">
+    <canvas id="game" aria-label="3D赛车游戏画布"></canvas>
+  </div>
 
   <header class="topbar">
     <div>
-      <div class="eyebrow">ONLINE ARCADE</div>
-      <div class="brand">NEON RACER</div>
+      <div class="eyebrow">3D ARCADE RACER</div>
+      <div class="brand">NEON DRIFT 3D</div>
     </div>
     <div class="server">
       <span id="serverDot" class="dot"></span>
@@ -26,21 +29,21 @@
   <section class="hud">
     <div class="metric">
       <strong id="speed">0</strong>
-      <span>速度</span>
+      <span>KM/H 速度</span>
     </div>
     <div class="metric">
       <strong id="score">0</strong>
-      <span>分数</span>
+      <span>得分</span>
     </div>
     <div class="metric">
       <strong id="best">0</strong>
-      <span>本机最佳</span>
+      <span>最高纪录</span>
     </div>
   </section>
 
   <aside class="leaderboard" aria-label="排行榜">
     <div class="panel-title">
-      <span>排行榜</span>
+      <span>🏆 全球风云榜</span>
       <button id="refreshRanks" title="刷新排行榜">刷新</button>
     </div>
     <ol id="leaderboardList">
@@ -48,30 +51,32 @@
     </ol>
   </aside>
 
-  <div class="nitro" aria-label="氮气">
+  <div class="nitro" aria-label="氮气槽">
     <div id="nitroBar"></div>
   </div>
 
   <div class="controls">
-    <button id="left" aria-label="向左">&larr;</button>
-    <button class="boost" id="boost" aria-label="氮气加速">NITRO</button>
-    <button id="right" aria-label="向右">&rarr;</button>
+    <button id="left" aria-label="向左转">&larr;</button>
+    <button class="boost" id="boost" aria-label="氮气喷射">NITRO<br><span style="font-size:9px;opacity:0.8">大喷</span></button>
+    <button id="right" aria-label="向右转">&rarr;</button>
   </div>
 
   <div class="overlay" id="overlay">
     <div class="menu">
-      <div class="kicker">多人排行榜版</div>
-      <h1 id="title">NEON RACER</h1>
-      <p id="message">躲开车流，收集金币，把成绩提交到服务器排行榜。</p>
+      <div class="kicker">3D 极速飞车引擎</div>
+      <h1 id="title">NEON DRIFT</h1>
+      <p id="message">QQ飞车式第三人称视角！左右躲避车流，收集能量核心，按下 NITRO 喷射破风！</p>
       <label class="name-field">
-        <span>玩家名</span>
-        <input id="playerName" maxlength="16" placeholder="输入你的昵称">
+        <span>车手代号</span>
+        <input id="playerName" maxlength="16" placeholder="输入你的车手名">
       </label>
-      <button class="start" id="start">开始比赛</button>
-      <div class="tips">A / ← 左移　D / → 右移　W / ↑ 加速　Space 氮气</div>
+      <button class="start" id="start">启动引擎</button>
+      <div class="tips">A / ← 左转　D / → 右转　W / ↑ 提速　Space 氮气喷射</div>
     </div>
   </div>
 
-  <script src="game.js?v=3"></script>
+  <!-- 本地 Three.js 核心库 -->
+  <script src="assets/three.min.js"></script>
+  <script src="game.js?v=5"></script>
 </body>
 </html>
