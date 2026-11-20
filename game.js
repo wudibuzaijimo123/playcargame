@@ -2185,6 +2185,8 @@ function createTrackRibbon(profile, material, vScale, uCoords, opts = {}) {
   const rows = slices + 1;
   const cols = profile.length;
   const positions = new Float32Array(rows * cols * 3);
+  const normals = new Float32Array(rows * cols * 3);
+  for (let i = 0; i < rows * cols; i++) normals[i * 3 + 1] = 1;
   const uvs = new Float32Array(rows * cols * 2);
   const indices = [];
   for (let s = 0; s < slices; s++) {
@@ -2198,6 +2200,7 @@ function createTrackRibbon(profile, material, vScale, uCoords, opts = {}) {
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
   geo.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   const mesh = new THREE.Mesh(geo, material);
