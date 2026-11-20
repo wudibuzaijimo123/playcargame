@@ -2,12 +2,13 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <title>3D 公路自驾漫游 - 特斯拉与自然风景</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#050614">
+  <title>3D 公路竞速 · 单机离线版</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=47">
+  <link rel="stylesheet" href="style.css?v=56">
 </head>
 <body>
   <!-- 3D WebGL Canvas 容器 -->
@@ -20,9 +21,10 @@
       <div class="eyebrow">3D ADVENTURE RACER</div>
       <div class="brand" id="brandTitle">COUNTRY ROAD</div>
     </div>
-    
-    <!-- 顶栏快速切场景按钮与音效开关 -->
+
+    <!-- 顶栏：退出 / 倾斜转向 / 音效 / 快速切场景 / 模式状态 -->
     <div class="topbar-actions">
+      <button id="exitGameBtn" class="exit-btn" title="退出当前对局返回菜单" type="button">退出</button>
       <button id="tiltToggle" class="icon-btn tilt-btn" title="开启手机倾斜转向" type="button">📱</button>
       <button id="audioToggle" class="icon-btn" title="开启音乐音效（默认静音）" type="button">🔇</button>
       <div class="quick-scene-select">
@@ -34,17 +36,13 @@
         </select>
       </div>
       <div class="server">
-        <span id="serverDot" class="dot"></span>
-        <span id="serverText">在线</span>
+        <span id="serverDot" class="dot offline"></span>
+        <span id="serverText">单机</span>
       </div>
     </div>
   </header>
 
-  <div id="roomBadge" style="position:fixed;right:16px;top:70px;z-index:45;display:none;padding:6px 13px;border-radius:999px;background:rgba(10,20,34,.78);border:1px solid rgba(97,239,255,.45);color:#61efff;font:700 14px/1 'Rajdhani',sans-serif;letter-spacing:.08em;backdrop-filter:blur(6px);"></div>
-
-  <div id="rivalMarker" style="position:fixed;left:50%;transform:translateX(-50%);z-index:60;display:none;padding:6px 16px;border-radius:999px;background:rgba(8,16,28,.82);border:1px solid rgba(97,239,255,.5);color:#61efff;font:700 15px/1 'Rajdhani',sans-serif;letter-spacing:.06em;pointer-events:none;"></div>
-
-  <canvas id="minimap" style="position:fixed;z-index:12;border-radius:12px;background:rgba(8,16,28,.58);border:1px solid rgba(97,239,255,.25);pointer-events:none;"></canvas>
+  <canvas id="minimap" class="minimap"></canvas>
 
   <section class="hud">
     <div class="metric">
@@ -57,18 +55,18 @@
     </div>
     <div class="metric">
       <strong id="best">--</strong>
-      <span>最佳用时</span>
+      <span id="bestLabel">最佳用时</span>
     </div>
     <div class="race-progress"><div id="raceProgressBar"></div><span id="raceProgressText">0 / 1500 m</span></div>
   </section>
 
   <aside class="leaderboard" aria-label="排行榜">
     <div class="panel-title">
-      <span>🏆 车王排行榜</span>
+      <span>🏆 本机排行榜</span>
       <button id="refreshRanks" title="刷新排行榜">刷新</button>
     </div>
     <ol id="leaderboardList">
-      <li>正在读取排行榜...</li>
+      <li>暂无纪录，等你来创奇迹！</li>
     </ol>
   </aside>
 
@@ -101,86 +99,99 @@
 
   <div class="overlay" id="overlay">
     <div class="menu">
-      <div class="kicker">3D 真实公路自驾漫游</div>
-      <h1 id="title">公路漫游 3D</h1>
-      <p id="message">开着特斯拉享受沿途的大自然风景！避开慢行车流，沿途看小牛、小鹿与农庄风车，伴着动感音乐出发！</p>
+      <div class="menu-scroll">
+        <div class="kicker">3D 公路竞速 · 单机离线版</div>
+        <h1 id="title">公路漫游 3D</h1>
+        <p id="message">踩油门冲向终点，避开路上的车流、收集金币，用最短时间与最高得分完成本机挑战！</p>
 
-      <!-- 场景选择器 -->
-      <div class="theme-selector">
-        <div class="theme-label">选择赛道主题地图</div>
-        <div class="theme-chips">
-          <button class="theme-chip active" data-theme="country" type="button">
-            <span class="chip-icon">🌾</span>
-            <span class="chip-name">乡间小路</span>
-          </button>
-          <button class="theme-chip" data-theme="island" type="button">
-            <span class="chip-icon">🏝️</span>
-            <span class="chip-name">逃离荒岛</span>
-          </button>
-          <button class="theme-chip" data-theme="jungle" type="button">
-            <span class="chip-icon">🌴</span>
-            <span class="chip-name">丛林狂飙</span>
-          </button>
-          <button class="theme-chip" data-theme="river" type="button">
-            <span class="chip-icon">🌊</span>
-            <span class="chip-name">沿河峡谷</span>
-          </button>
+        <!-- 场景选择器 -->
+        <section class="menu-section theme-selector">
+          <div class="theme-label">赛道主题</div>
+          <div class="theme-chips">
+            <button class="theme-chip active" data-theme="country" type="button">
+              <span class="chip-icon">🌾</span><span class="chip-name">乡间小路</span>
+            </button>
+            <button class="theme-chip" data-theme="island" type="button">
+              <span class="chip-icon">🏝️</span><span class="chip-name">逃离荒岛</span>
+            </button>
+            <button class="theme-chip" data-theme="jungle" type="button">
+              <span class="chip-icon">🌴</span><span class="chip-name">丛林狂飙</span>
+            </button>
+            <button class="theme-chip" data-theme="river" type="button">
+              <span class="chip-icon">🌊</span><span class="chip-name">沿河峡谷</span>
+            </button>
+          </div>
+        </section>
+
+        <div class="menu-row">
+          <label class="name-field">
+            <span>车手昵称</span>
+            <input id="playerName" maxlength="16" placeholder="输入你的车手名" autocomplete="nickname">
+          </label>
+          <label class="race-length-field">
+            <span>比赛距离</span>
+            <select id="raceLength"><option value="1500">短程 1.5 km</option><option value="3000">标准 3 km</option></select>
+          </label>
+          <label class="race-length-field">
+            <span>车流难度</span>
+            <select id="difficultySelect">
+              <option value="easy">🟢 休闲（稀疏）</option>
+              <option value="normal" selected>🟡 标准（默认）</option>
+              <option value="hard">🔴 地狱（高频）</option>
+            </select>
+          </label>
         </div>
+
+        <!-- 更多设置（操控 / 快捷键 / 声音） -->
+        <details class="menu-more" id="menuMore">
+          <summary>⚙️ 操控与声音设置</summary>
+
+          <div class="menu-steering" role="group" aria-label="选择方向控制方式">
+            <div class="theme-label">方向控制方式</div>
+            <div class="menu-steering-options">
+              <button class="steering-choice active" id="menuButtonMode" type="button">🎮 按键控制</button>
+              <button class="steering-choice" id="menuTiltMode" type="button">📱 手机倾斜</button>
+            </div>
+            <div class="steering-help" id="steeringHelp">使用屏幕方向键或电脑键盘控制</div>
+          </div>
+
+          <div class="keymap-settings">
+            <div class="theme-label">键盘快捷键 <small>点按钮后按下你要用的键</small></div>
+            <div class="keymap-row">
+              <label><button id="key-throttle" type="button">W</button><span>油门</span></label>
+              <label><button id="key-brake" type="button">S</button><span>刹车</span></label>
+              <label><button id="key-boost" type="button">Shift</button><span>氮气</span></label>
+              <label><button id="key-left" type="button">←</button><span>左转</span></label>
+              <label><button id="key-right" type="button">→</button><span>右转</span></label>
+              <button id="key-reset" class="key-reset" type="button">恢复默认</button>
+            </div>
+          </div>
+
+          <div class="audio-settings">
+            <button id="testAudioBtn" class="test-audio-btn" type="button">🎵 点击开启欢快车载音乐（默认静音）</button>
+            <label class="custom-music-btn">
+              <span>📂 放自己手机/电脑里的歌（如《泡沫》等音频文件）</span>
+              <input id="customMusicInput" type="file" accept="audio/*">
+            </label>
+            <div class="custom-music-name" id="customMusicName">当前曲目：内置欢快流行钢琴舞曲</div>
+          </div>
+        </details>
       </div>
 
-      <label class="name-field">
-        <span>车手昵称</span>
-        <input id="playerName" maxlength="16" placeholder="输入你的车手名">
-      </label>
-      <div class="menu-steering" role="group" aria-label="选择方向控制方式">
-        <div class="theme-label">选择方向控制方式</div>
-        <div class="menu-steering-options">
-          <button class="steering-choice active" id="menuButtonMode" type="button">🎮 按键控制</button>
-          <button class="steering-choice" id="menuTiltMode" type="button">📱 手机倾斜</button>
-        </div>
-        <div class="steering-help" id="steeringHelp">使用屏幕方向键或电脑键盘控制</div>
+      <div class="menu-footer">
+        <button class="start" id="start" type="button">启动出发</button>
+        <div class="tips" id="controlTips">W 油门　S 刹车　左 Shift 氮气　← / → 转向</div>
       </div>
-      <label class="race-length-field">比赛距离
-        <select id="raceLength"><option value="1500">短程 1.5 km</option><option value="3000">标准 3 km</option></select>
-      </label>
-      <div class="keymap-settings">
-        <div class="keymap-title">快捷键（点按钮后按下你要用的键）</div>
-        <div class="keymap-row">
-          <button id="key-throttle" type="button">W</button><span>油门</span>
-          <button id="key-brake" type="button">S</button><span>刹车</span>
-          <button id="key-boost" type="button">Shift</button><span>加速</span>
-          <button id="key-left" type="button">←</button><span>左转</span>
-          <button id="key-right" type="button">→</button><span>右转</span>
-          <button id="key-reset" type="button">恢复默认</button>
-        </div>
-      </div>
-      <div class="room-controls" style="display:none">
-        <button id="createRoom" type="button">创建房间</button>
-        <div id="roomStatus" style="display:none">单人比赛</div>
-      </div>
-      <!-- 苹果 iOS Safari 提示与试听测试 -->
-      <div style="background:rgba(255,180,0,0.12);border:1px solid rgba(255,200,0,0.35);border-radius:10px;padding:8px 12px;margin:8px 0 12px;font-size:11px;color:#ffeaa7;line-height:1.5;text-align:left;">
-        🔔 <b>苹果 iPhone / Safari 用户提示：</b><br>
-        1. 听不到音乐请<b>拨动手机左侧【实体静音开关】关闭静音模式</b>（露出红点时苹果系统会强制静音所有网页音效），并按音量键调大声音。<br>
-        2. 苹果 iOS 系统原生不支持网页物理震动，发生碰撞时已为你呈现全屏剧烈红闪与镜头震动特效！
-      </div>
-
-      <button id="testAudioBtn" type="button" style="background:rgba(97,239,255,0.18);border:1px solid #61efff;color:#61efff;padding:10px 16px;border-radius:24px;font-size:13px;cursor:pointer;margin-bottom:12px;font-weight:700;width:100%;letter-spacing:1px;display:flex;align-items:center;justify-content:center;gap:6px;">
-        🎵 点击试听 / 开启公路自驾车载音乐
-      </button>
-
-      <button class="start" id="start">启动出发</button>
-      <div class="tips">A / ← 左转　D / → 右转　W / ↑ 加速　Space 氮气加速</div>
     </div>
   </div>
 
-  <!-- 苹果 Safari 及移动端 100% 兼容原生音频标签 -->
-  <audio id="bgmAudio" src="assets/bgm.wav" loop playsinline preload="auto"></audio>
+  <!-- 原生音频标签（iOS Safari 兼容） -->
+  <audio id="bgmAudio" src="assets/bgm.wav?v=3" loop playsinline preload="auto"></audio>
   <audio id="crashAudio" src="assets/crash.wav" playsinline preload="auto"></audio>
   <audio id="coinAudio" src="assets/coin.wav" playsinline preload="auto"></audio>
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=57"></script>
+  <script src="game.js?v=82"></script>
 </body>
 </html>
