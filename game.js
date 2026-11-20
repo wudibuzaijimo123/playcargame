@@ -153,7 +153,7 @@ class MusicEngine {
 
   ensureContext() {
     if (!this.bgmAudio) {
-      this.bgmAudio = document.querySelector("#bgmAudio") || new Audio("assets/bgm.wav");
+      this.bgmAudio = document.querySelector("#bgmAudio") || new Audio("assets/bgm.mp3");
       this.bgmAudio.loop = true;
       this.bgmAudio.volume = 1.0;
     }
@@ -243,8 +243,8 @@ class MusicEngine {
 
       this.synthTimer = setInterval(() => {
         if (!this.enabled || !running || !this.ctx || this.ctx.state !== "running") return;
-        // 如果原生 HTML5 流行歌已经在顺畅播放，就不再叠加合成音避免重影
-        if (this.bgmAudio && !this.bgmAudio.paused && this.bgmAudio.readyState >= 2) return;
+        // 如果原生 HTML5 歌曲已经开始播放或正在缓冲，就不叠加合成音避免重影
+        if (this.bgmAudio && !this.bgmAudio.paused && !this.bgmAudio.error) return;
         const now = this.ctx.currentTime + 0.01;
         const idx = this.synthStep % 32;
 
