@@ -1,45 +1,80 @@
-# 离线版 · 3D 公路自驾（单机自己刷成绩）
+# 离线单机版 · PlayCarGame（3D 公路竞速）
 
-纯单机版本：不连服务器、没有联机房间、没有排行榜接口。跑完一局把用时记在本机浏览器里，自己刷新纪录。
+在线演示（GitHub Pages 纯静态）：<https://game.yhj123.dpdns.org/>  
+GitHub（纯单机版）：<https://github.com/wudibuzaijimo123/playcargame>  
+双人联机版仓库（含 Node 后端）：<https://github.com/wudibuzaijimo123/zaixianyouxi>
 
-打开 `index.html` 就能玩（也可以用任意静态服务器托管，例如 GitHub Pages）。
+纯前端纯单机版本：不连后端、无需任何数据库或联机配置，所有成绩保存在本地浏览器 `localStorage`，适合单人刷纪录或离线托管到任意静态服务器（Nginx / GitHub Pages / 本地 localhost）。
 
-## 文件说明
+---
+
+## 🚀 一、本地运行（Localhost）
+
+无需 `npm install`、不依赖 CDN，只要启动任意一个静态文件服务器即可访问：
+
+### 方式 1：使用 Python（系统自带最省事）
+
+```bash
+git clone https://github.com/wudibuzaijimo123/playcargame.git
+cd playcargame
+
+python -m http.server 8080
+# 如果系统命令是 python3，则运行：python3 -m http.server 8080
+```
+
+浏览器打开：<http://localhost:8080/>
+
+### 方式 2：使用 Node.js
+
+```bash
+npx --yes serve . -l 8080
+```
+
+浏览器打开：<http://localhost:8080/>
+
+> 为什么建议起 `localhost` 而不是直接双击 `index.html`？因为浏览器对 `file://` 协议下的音频流式播放、部分传感器与 `localStorage` 限制较多，通过 `http://localhost:8080/` 打开体验最完整。
+
+---
+
+## ☁️ 二、部署到自己的静态服务器（Nginx 示例）
+
+将本仓库所有文件上传到服务器目录（例如 `/var/www/playcargame`），配置 Nginx：
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    root /var/www/playcargame;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
+重载 Nginx 即可生效：`nginx -t && systemctl reload nginx`；也可以直接推送到任意仓库打开 **GitHub Pages** 托管。
+
+---
+
+## 🎮 三、特性与玩法
+
+- **4 大实景主题与逼真天空景深**：🌾 乡间小路 / 🏝️ 逃离荒岛 / 🌴 丛林狂飙 / 🌊 沿河峡谷；渐变天空穹顶搭配高空柔软白云，远山景深视差与高速气流破风线。
+- **复合长弯道与赛程**：支持 **3 km / 5 km（默认）/ 8 km / 12 km** 赛程；每 2400 m 一圈复合 S 弯与发卡弯，左上角配有 CS:GO 风格圆形战术雷达。
+- **驾驶与操控**：最高时速 `200 km/h`，具备真实渐进刹车减速度、加速抬头/刹车点头纵倾感；电脑支持自定义快捷键（默认 `W / S / 左 Shift / ← →`），手机支持左右拇指操控与倾斜转向及震动反馈。
+- **音乐与声效**：内置 7 首邓紫棋歌单顺序循环，默认开启播放，也可随时在入口页及局内点击右上角 `🔊 / 🔇` 一键静音或本地加选音乐。
+
+## 📁 四、文件说明与本地成绩存储
 
 | 文件 / 目录 | 作用 |
 | --- | --- |
-| `index.html` | 页面骨架：3D 画布、HUD（车速 / 比赛用时 / 最佳用时）、车王排行榜（本机成绩）、控制按钮、小地图画布、音乐开关 |
-| `game.js` | 游戏主逻辑：Three.js 场景与赛道（含 U 型弯）、车辆物理、AI 车流、实体碰撞、计时与冲线判定、小地图绘制、音效引擎。离线模式下所有网络请求被禁用 |
-| `style.css` | 全部界面样式（含移动端适配） |
-| `assets/three.min.js` | 本地 Three.js 引擎，不依赖 CDN |
-| `assets/bgm.wav` | 背景音乐（**默认静音**，点右上角喇叭才播放） |
-| `assets/crash.wav` | 撞击音效 |
-| `assets/coin.wav` | 金币音效 |
-| `README.md` | 本说明 |
-| `.gitignore` | 忽略规则 |
+| [`index.html`](index.html) | 页面结构：3D 画布、CS:GO 雷达、HUD、本机排行榜、音乐按钮与操控面板 |
+| [`game.js`](game.js) | 核心逻辑：Three.js 3D 场景与车模、2400m 环山赛道、车辆动力学、AI 车流、小地图与音乐引擎 |
+| [`style.css`](style.css) | 界面样式与手机端响应式布局 |
+| [`assets/`](assets) | 本地 `three.min.js`、音效及 7 首 MP3 歌单 |
 
-## 玩法
-
-1. 选赛道主题、填车手昵称、选控制方式（按键 / 手机倾斜）、选比赛距离
-2. 点「启动出发」
-3. 踩油门才走，松手约 1 秒停住，时速上限 200 km/h
-4. 撞到 AI 车是「弹开 + 减速」，不会出局
-5. 冲过终点后显示本局用时，并和本机最佳用时对比
-6. 排行榜读的是本机保存的成绩，用时越短越靠前
-
-## 音效
-
-默认静音，不会一进页面就响。点右上角 `🔇` 按钮开启音乐和音效，选择会记在本机。
-
-iPhone 若开了侧边实体静音键，网页音效会被系统强制静音，需要拨回去。
-
-## 本地成绩存放
-
-浏览器 `localStorage`：
-
-- `racerLocalScores`：成绩列表（名字 + 用时）
+浏览器 `localStorage` 存储键值：
+- `racerLocalScores`：本机最快用时榜单（姓名 + 用时）
 - `racerBestTime`：个人最佳用时
-- `neonRacerName`：上次使用的昵称
-- `racerAudioEnabled`：音乐开关状态
-
-清空浏览器站点数据即可重置成绩。
+- `neonRacerName`：上次使用的车手昵称
+- `racerAudioEnabled`：静音 / 声音开关记忆
