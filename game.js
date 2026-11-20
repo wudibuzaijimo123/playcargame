@@ -136,26 +136,77 @@ const OFFLINE_MODE = true;
 // ═══════════════════════════════════════
 // 100% 稳定运行的真实公路自驾车载音乐与声效系统 (HTML5 Audio + WebAudio 深度双引擎)
 // ═══════════════════════════════════════
+const GEM_PLAYLIST = [
+  { title: "邓紫棋 - 泡沫", src: "assets/G.E.M.邓紫棋 - 泡沫.mp3" },
+  { title: "邓紫棋 - 光年之外", src: "assets/G.E.M.邓紫棋 - 光年之外.mp3" },
+  { title: "邓紫棋 - 来自天堂的魔鬼", src: "assets/G.E.M.邓紫棋 - 来自天堂的魔鬼.mp3" },
+  { title: "邓紫棋 - 唯一", src: "assets/G.E.M.邓紫棋 - 唯一.mp3" },
+  { title: "邓紫棋 - 后会无期", src: "assets/G.E.M.邓紫棋 - 后会无期.mp3" },
+  { title: "邓紫棋 - 透明", src: "assets/G.E.M.邓紫棋 - 透明.mp3" },
+  { title: "邓紫棋 - 龙卷风 (Live)", src: "assets/G.E.M.邓紫棋 - 龙卷风 (Live).mp3" }
+];
+
 class MusicEngine {
   constructor() {
     // 每次进入默认静音，只有玩家主动点开声音或选歌才播放
     this.enabled = false;
+    this.trackIndex = 0;
     this.bgmAudio = null;
+    this.bgmBound = false;
     this.crashAudio = null;
     this.coinAudio = null;
     this.customTrackUrl = "";
+    this.customTrackTitle = "";
     this.ctx = null;
     this.engineGain = null;
     this.engineOsc = null;
-    this.synthTimer = null;
-    this.synthStep = 0;
+  }
+
+  currentTrack() {
+    return GEM_PLAYLIST[this.trackIndex] || GEM_PLAYLIST[0];
+  }
+
+  loadTrack(index, autoPlay = false) {
+    this.trackIndex = ((index % GEM_PLAYLIST.length) + GEM_PLAYLIST.length) % GEM_PLAYLIST.length;
+    const track = this.currentTrack();
+    if (!this.bgmAudio) return;
+    this.bgmAudio.loop = false;
+    const encoded = encodeURI(track.src);
+    if (!this.bgmAudio.getAttribute("src") || !this.bgmAudio.src.endsWith(encoded)) {
+      this.bgmAudio.src = encoded;
+    }
+    syncAudioUI();
+    if (autoPlay && this.enabled) {
+      this.bgmAudio.currentTime = 0;
+      this.bgmAudio.play().then(() => syncAudioUI()).catch(e => {
+        console.log("HTML5 Audio wait for gesture:", e);
+      });
+    }
+  }
+
+  nextTrack(autoPlay = true) {
+    if (this.customTrackUrl) {
+      try { URL.revokeObjectURL(this.customTrackUrl); } catch (e) {}
+      this.customTrackUrl = "";
+      this.customTrackTitle = "";
+    }
+    this.loadTrack(this.trackIndex + 1, autoPlay);
   }
 
   ensureContext() {
     if (!this.bgmAudio) {
-      this.bgmAudio = document.querySelector("#bgmAudio") || new Audio("assets/bgm.mp3");
-      this.bgmAudio.loop = true;
+      this.bgmAudio = document.querySelector("#bgmAudio") || new Audio(encodeURI(this.currentTrack().src));
+      this.bgmAudio.loop = Boolean(this.customTrackUrl);
       this.bgmAudio.volume = 1.0;
+    }
+    if (this.bgmAudio && !this.bgmBound) {
+      this.bgmBound = true;
+      this.bgmAudio.addEventListener("ended", () => {
+        if (!this.enabled || this.customTrackUrl) return;
+        this.nextTrack(true);
+      });
+      this.bgmAudio.addEventListener("play", () => syncAudioUI());
+      this.bgmAudio.addEventListener("pause", () => syncAudioUI());
     }
     if (!this.crashAudio) {
       this.crashAudio = document.querySelector("#crashAudio") || new Audio("assets/crash.wav");
@@ -214,99 +265,29 @@ class MusicEngine {
     if (!this.enabled) return;
     this.ensureContext();
 
-    // 1. 原生 HTML5 音频播放（配合服务端 206 Range，兼容 iOS Safari）
+    // 播放用户提供的歌单列表（单曲播完自动切换下一首循环）
     if (this.bgmAudio) {
       try {
+        this.bgmAudio.loop = Boolean(this.customTrackUrl);
         this.bgmAudio.volume = 1.0;
+        if (!this.bgmAudio.getAttribute("src") && !this.customTrackUrl) {
+          this.loadTrack(this.trackIndex, false);
+        }
         if (this.bgmAudio.paused) {
           const playPromise = this.bgmAudio.play();
           if (playPromise !== undefined) {
-            playPromise.then(() => {
-              if (soundStatus) soundStatus.textContent = "🔊 音乐播放中";
-            }).catch(e => {
+            playPromise.then(() => syncAudioUI()).catch(e => {
               console.log("HTML5 Audio wait for gesture:", e);
             });
           }
         }
       } catch (e) {}
     }
-
-    // 2. Web Audio 双保险欢快流行曲合成循环（128 BPM 阳光流行钢琴进行）
-    if (this.ctx && !this.synthTimer) {
-      const melody = [
-        783.99, 1046.5, 880.00, 783.99, 659.25, 783.99, 1046.5, 0,
-        783.99, 987.77, 880.00, 783.99, 659.25, 587.33, 659.25, 0,
-        880.00, 1046.5, 1174.7, 1046.5, 880.00, 783.99, 880.00, 0,
-        783.99, 659.25, 587.33, 659.25, 783.99, 880.00, 783.99, 0
-      ];
-      const bass = [130.81, 130.81, 98.00, 98.00, 110.00, 110.00, 82.41, 82.41];
-
-      this.synthTimer = setInterval(() => {
-        if (!this.enabled || !running || !this.ctx || this.ctx.state !== "running") return;
-        // 如果原生 HTML5 歌曲已经开始播放或正在缓冲，就不叠加合成音避免重影
-        if (this.bgmAudio && !this.bgmAudio.paused && !this.bgmAudio.error) return;
-        const now = this.ctx.currentTime + 0.01;
-        const idx = this.synthStep % 32;
-
-        if (idx % 2 === 0) {
-          try {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.frequency.setValueAtTime(135, now);
-            osc.frequency.exponentialRampToValueAtTime(42, now + 0.12);
-            gain.gain.setValueAtTime(0.35, now);
-            gain.gain.linearRampToValueAtTime(0.01, now + 0.13);
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(now);
-            osc.stop(now + 0.14);
-          } catch(e) {}
-        }
-
-        const bFreq = bass[Math.floor(idx / 4) % 8];
-        if (bFreq) {
-          try {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = "triangle";
-            osc.frequency.setValueAtTime(bFreq * (idx % 2 === 1 ? 2 : 1), now);
-            gain.gain.setValueAtTime(0.22, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(now);
-            osc.stop(now + 0.19);
-          } catch(e) {}
-        }
-
-        const mFreq = melody[idx];
-        if (mFreq > 0) {
-          try {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = "triangle";
-            osc.frequency.setValueAtTime(mFreq, now);
-            gain.gain.setValueAtTime(0.24, now);
-            gain.gain.exponentialRampToValueAtTime(0.005, now + 0.22);
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(now);
-            osc.stop(now + 0.23);
-          } catch(e) {}
-        }
-
-        this.synthStep++;
-      }, 250);
-    }
   }
 
   stopBGM() {
     if (this.bgmAudio) {
       try { this.bgmAudio.pause(); } catch (e) {}
-    }
-    if (this.synthTimer) {
-      clearInterval(this.synthTimer);
-      this.synthTimer = null;
     }
   }
 
@@ -396,19 +377,9 @@ class MusicEngine {
     this.enabled = !this.enabled;
     localStorage.setItem("racerAudioEnabled", this.enabled ? "1" : "0");
     if (this.enabled) {
-      this.ensureContext();
-      if (running) {
-        this.startBGM();
-      } else if (this.bgmAudio) {
-        // 菜单上点开喇叭时立即预热/解锁，保证移动端随时可播
-        this.bgmAudio.play().catch(() => {});
-      }
+      this.startBGM();
     } else {
       if (this.bgmAudio) this.bgmAudio.pause();
-      if (this.synthTimer) {
-        clearInterval(this.synthTimer);
-        this.synthTimer = null;
-      }
     }
     return this.enabled;
   }
@@ -419,18 +390,33 @@ const sound = new MusicEngine();
 // 静音/开启状态同步到界面（默认静音，点右上角喇叭才出声）
 function syncAudioUI() {
   const on = sound.enabled;
+  const track = sound.currentTrack();
+  const trackLabel = sound.customTrackUrl
+    ? (sound.customTrackTitle || "自选本地歌曲")
+    : `${track.title}（${sound.trackIndex + 1}/${GEM_PLAYLIST.length}）`;
+  const isPlaying = Boolean(on && sound.bgmAudio && !sound.bgmAudio.paused);
   if (audioToggle) {
     audioToggle.textContent = on ? "🔊" : "🔇";
     audioToggle.style.opacity = on ? "1" : "0.55";
     audioToggle.title = on ? "关闭音乐音效" : "开启音乐音效（默认静音）";
   }
   if (soundStatus) {
-    soundStatus.textContent = on ? "🔊 音效已开启" : "🔇 默认静音，点右上角喇叭开启";
+    soundStatus.textContent = on
+      ? `🔊 正在播放：${trackLabel}`
+      : "🔇 默认静音，点右上角喇叭开启";
+  }
+  const musicNameEl = document.querySelector("#customMusicName");
+  if (musicNameEl) {
+    musicNameEl.textContent = sound.customTrackUrl
+      ? `当前曲目：${trackLabel}`
+      : `当前曲目：${trackLabel} 歌单循环`;
   }
   const testBtn = document.querySelector("#testAudioBtn");
   if (testBtn) {
-    testBtn.classList.toggle("playing", on && Boolean(sound.bgmAudio && !sound.bgmAudio.paused));
-    if (!on) testBtn.textContent = "🎵 点击试听 / 开启车载音乐";
+    testBtn.classList.toggle("playing", isPlaying);
+    testBtn.textContent = isPlaying
+      ? `🎵 正在播放：${track.title}`
+      : "🎵 点击试听邓紫棋歌单（默认静音）";
   }
 }
 if (audioToggle) {
@@ -2733,6 +2719,7 @@ if (customMusicInput) {
       try { URL.revokeObjectURL(sound.customTrackUrl); } catch (e) {}
     }
     sound.customTrackUrl = URL.createObjectURL(file);
+    sound.customTrackTitle = file.name;
     if (sound.bgmAudio) {
       sound.bgmAudio.src = sound.customTrackUrl;
       sound.bgmAudio.loop = true;
@@ -2740,18 +2727,12 @@ if (customMusicInput) {
     sound.enabled = true;
     sound.startBGM();
     syncAudioUI();
-    if (customMusicName) customMusicName.textContent = `当前曲目：${file.name}`;
-    if (testAudioBtn) {
-      testAudioBtn.textContent = "🎵 正在播放自选歌曲";
-      testAudioBtn.classList.add("playing");
-    }
   });
 }
 
 const testAudioBtn = document.querySelector("#testAudioBtn");
 if (testAudioBtn) {
   testAudioBtn.addEventListener("click", () => {
-    // 试听按钮等价于"我要开声音"
     if (!sound.enabled) {
       sound.enabled = true;
       localStorage.setItem("racerAudioEnabled", "1");
@@ -2759,8 +2740,18 @@ if (testAudioBtn) {
     sound.ensureContext();
     sound.startBGM();
     syncAudioUI();
-    testAudioBtn.textContent = "🎵 音乐正在播放中";
-    testAudioBtn.classList.add("playing");
+  });
+}
+
+const nextTrackBtn = document.querySelector("#nextTrackBtn");
+if (nextTrackBtn) {
+  nextTrackBtn.addEventListener("click", () => {
+    if (!sound.enabled) {
+      sound.enabled = true;
+      localStorage.setItem("racerAudioEnabled", "1");
+    }
+    sound.ensureContext();
+    sound.nextTrack(true);
   });
 }
 

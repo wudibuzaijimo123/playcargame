@@ -168,12 +168,13 @@
           </div>
 
           <div class="audio-settings">
-            <button id="testAudioBtn" class="test-audio-btn" type="button">🎵 点击试听《泡沫》（默认静音）</button>
+            <button id="testAudioBtn" class="test-audio-btn" type="button">🎵 点击试听邓紫棋歌单（默认静音）</button>
+            <button id="nextTrackBtn" class="test-audio-btn" type="button">⏭ 切下一首（7 首歌单循环）</button>
             <label class="custom-music-btn">
-              <span>📂 放自己手机/电脑里的歌（如《泡沫》等音频文件）</span>
+              <span>📂 临时加选自己手机/电脑里的歌</span>
               <input id="customMusicInput" type="file" accept="audio/*">
             </label>
-            <div class="custom-music-name" id="customMusicName">当前曲目：邓紫棋《泡沫》</div>
+            <div class="custom-music-name" id="customMusicName">当前曲目：邓紫棋 - 泡沫（1/7 歌单循环）</div>
           </div>
         </details>
       </div>
@@ -185,13 +186,13 @@
     </div>
   </div>
 
-  <!-- 原生音频标签（iOS Safari 兼容） -->
-  <audio id="bgmAudio" src="assets/bgm.mp3?v=1" loop playsinline preload="auto"></audio>
+  <!-- 原生音频标签（不使用 loop 以便单曲播完自动切换歌单下一首，兼容 iOS Safari） -->
+  <audio id="bgmAudio" src="assets/G.E.M.邓紫棋 - 泡沫.mp3" playsinline preload="metadata"></audio>
   <audio id="crashAudio" src="assets/crash.wav" playsinline preload="auto"></audio>
   <audio id="coinAudio" src="assets/coin.wav" playsinline preload="auto"></audio>
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=84"></script>
+  <script src="game.js?v=85"></script>
 </body>
 </html>
