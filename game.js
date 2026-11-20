@@ -560,7 +560,12 @@ const worldGroup = new THREE.Group();
 scene.add(worldGroup);
 
 const roadSegments = [];
-const sceneryObjects = []; // 动物、木屋、树木、风车
+const sceneryObjects = []; // 近景动物、木屋、树木、风车
+const distantHills = [];   // 远景山脉（低视差慢速移动，不随路面急弯左右甩动）
+const skyClouds = [];      // 高空柔和积云层
+const windStreaks = [];    // 车身周围高速破风气流线
+let horizonGroup = null;
+let skyDome = null;
 
 const THEMES = {
   country: {
@@ -655,7 +660,48 @@ const WORLD_TEXTURES = (() => {
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 3);
     return tex;
+  };
+  const makeSoftCloudTex = () => {
+    const c = document.createElement("canvas");
+    c.width = 256;
+    c.height = 128;
+    const g = c.getContext("2d");
+    g.clearRect(0, 0, 256, 128);
+    // 多层柔和渐变积云团：顶部受日照暖白，底部带淡蓝灰阴影，完全无几何硬边
+    const puffs = [
+      [82, 74, 52, "rgba(218,229,244,0.34)"],
+      [134, 72, 60, "rgba(214,226,242,0.36)"],
+      [182, 76, 48, "rgba(220,231,245,0.30)"],
+      [68, 60, 44, "rgba(255,255,255,0.52)"],
+      [112, 48, 56, "rgba(255,255,255,0.68)"],
+      [158, 52, 50, "rgba(255,255,255,0.62)"],
+      [196, 62, 38, "rgba(255,255,255,0.44)"]
+    ];
+    puffs.forEach(([px, py, pr, col]) => {
+      const grad = g.createRadialGradient(px, py, pr * 0.12, px, py, pr);
+      grad.addColorStop(0, col);
+      grad.addColorStop(0.55, col.replace(/[\d.]+\)$/, "0.18)"));
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 256, 128);
+    });
+    return new THREE.CanvasTexture(c);
+  };
+  const makeSunHaloTex = () => {
+    const c = document.createElement("canvas");
+    c.width = 128;
+    c.height = 128;
+    const g = c.getContext("2d");
+    const rg = g.createRadialGradient(64, 64, 2, 64, 64, 62);
+    rg.addColorStop(0, "rgba(255,252,232,0.95)");
+    rg.addColorStop(0.22, "rgba(255,240,190,0.55)");
+    rg.addColorStop(0.55, "rgba(255,216,145,0.16)");
+    rg.addColorStop(1, "rgba(255,216,145,0)");
+    g.fillStyle = rg;
+    g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
   };
   const makeGround = () => {
     const c = document.createElement("canvas");
@@ -695,6 +741,8 @@ const WORLD_TEXTURES = (() => {
     asphaltTex: makeAsphalt(),
     groundTex: makeGround(),
     carShadowTex: makeCarShadow(),
+    softCloudTex: makeSoftCloudTex(),
+    sunHaloTex: makeSunHaloTex(),
     woodTex: (() => {
       const c = document.createElement("canvas");
       c.width = 128; c.height = 128;
@@ -749,9 +797,55 @@ const WORLD_TEXTURES = (() => {
   };
 })();
 
-// 地平线质感反射环境贴图生成器（为车漆清漆、全景天窗、金属轮毂、水系提供实时环境高光）
+// 地平线质感反射环境贴图与高空全景渐变穹顶（按主题缓存，兼具电影天际线质感与低开销）
 let envPmremGen = null;
 const ENV_CACHE = new Map();
+const SKY_TEX_CACHE = new Map();
+
+function makeSkyDomeTexture(themeKey, theme) {
+  if (SKY_TEX_CACHE.has(themeKey)) return SKY_TEX_CACHE.get(themeKey);
+  const c = document.createElement("canvas");
+  c.width = 1024;
+  c.height = 512;
+  const g = c.getContext("2d");
+  const topCol = new THREE.Color(theme.skyColor).multiplyScalar(0.76);
+  const midCol = new THREE.Color(theme.skyColor);
+  const fogCol = new THREE.Color(theme.fogColor).lerp(new THREE.Color(0xfff6e5), 0.25);
+
+  const grad = g.createLinearGradient(0, 0, 0, 320);
+  grad.addColorStop(0.0, "#" + topCol.getHexString());
+  grad.addColorStop(0.48, "#" + midCol.getHexString());
+  grad.addColorStop(0.84, "#" + fogCol.getHexString());
+  grad.addColorStop(1.0, "#" + new THREE.Color(theme.fogColor).getHexString());
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 1024, 512);
+
+  // 高空柔美卷云丝与远层积云散射（直接绘入穹顶，告别球体云塑料感）
+  for (let i = 0; i < 48; i++) {
+    const cx = ((Math.sin(i * 19.37) * 4321.9) % 1 + 1) % 1 * 1024;
+    const cy = 78 + (((Math.sin(i * 41.13) * 1923.7) % 1 + 1) % 1) * 120;
+    const rx = 55 + (i % 5) * 28;
+    const ry = 10 + (i % 3) * 6;
+    g.save();
+    g.translate(cx, cy);
+    g.scale(1, ry / rx);
+    const cg = g.createRadialGradient(0, 0, rx * 0.08, 0, 0, rx);
+    const alpha = 0.08 + (i % 4) * 0.035;
+    cg.addColorStop(0, `rgba(255,252,248,${alpha})`);
+    cg.addColorStop(0.5, `rgba(242,246,255,${alpha * 0.45})`);
+    cg.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = cg;
+    g.beginPath();
+    g.arc(0, 0, rx, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  SKY_TEX_CACHE.set(themeKey, tex);
+  return tex;
+}
+
 function applyHorizonEnvironment(themeKey, theme) {
   if (ENV_CACHE.has(themeKey)) {
     scene.environment = ENV_CACHE.get(themeKey);
@@ -1534,19 +1628,22 @@ function createTeslaCar(isPlayer = true, colorHex = 0xffffff) {
     carGroup.add(hl);
   });
 
-  // 5. 立体熏黑贯穿式 LED 尾灯 + 牌照框 + 尾标
+  // 5. 立体熏黑贯穿式 LED 尾灯 + 牌照框 + 尾标（玩家车型独立刹车灯材质，刹车明显高亮）
+  const tailMat = isPlayer ? new THREE.MeshBasicMaterial({ color: 0xb81628 }) : CAR_ASSETS.tailMat;
+  carGroup.userData.tailMat = tailMat;
+
   const tailHousing = new THREE.Mesh(CAR_ASSETS.box, CAR_ASSETS.trimMat);
   tailHousing.scale.set(1.74, 0.13, 0.07);
   tailHousing.position.set(0, 0.68, 0.95);
   carGroup.add(tailHousing);
 
-  const tailBar = new THREE.Mesh(CAR_ASSETS.box, CAR_ASSETS.tailMat);
+  const tailBar = new THREE.Mesh(CAR_ASSETS.box, tailMat);
   tailBar.scale.set(1.66, 0.055, 0.085);
   tailBar.position.set(0, 0.69, 0.96);
   carGroup.add(tailBar);
 
   [-0.72, 0.72].forEach(tx => {
-    const blade = new THREE.Mesh(CAR_ASSETS.box, CAR_ASSETS.tailMat);
+    const blade = new THREE.Mesh(CAR_ASSETS.box, tailMat);
     blade.scale.set(0.24, 0.10, 0.09);
     blade.position.set(tx, 0.68, 0.96);
     carGroup.add(blade);
@@ -1662,7 +1759,9 @@ const carPhysics = {
   heading: 0,      // 车身偏航角 (Heading)
   steerAngle: 0,   // 前轮转向打角
   roll: 0,         // 悬挂轻微侧倾
-  rollVel: 0
+  rollVel: 0,
+  pitch: 0,        // 加速抬头/刹车点头纵倾角
+  boostSpeed: 0    // 平滑氮气增益
 };
 
 // 严谨普通家用车物理参数 (特斯拉 Model 3 轴距 2.85m，高速变道平顺沉稳，零侧滑漂移)
@@ -1909,20 +2008,28 @@ function createGrassTuft(themeKey) {
   return g;
 }
 
-function createDistantHill(themeKey) {
+function createDistantHill(themeKey, fogColorHex) {
   const g = new THREE.Group();
-  const color =
-    themeKey === "island" ? 0xd9c28a :
-    themeKey === "jungle" ? 0x1b4b2e :
-    themeKey === "river" ? 0x8f563e :
-    0x498840;
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
+  const baseCol = new THREE.Color(
+    themeKey === "island" ? 0xcab68a :
+    themeKey === "jungle" ? 0x1e4c30 :
+    themeKey === "river" ? 0x87543f :
+    0x467b42
+  );
+  // 远景山脊混入大气雾色，形成自然的空气透视深度
+  baseCol.lerp(new THREE.Color(fogColorHex), 0.52);
+  const mat = new THREE.MeshStandardMaterial({ color: baseCol, roughness: 0.96, flatShading: true });
   const main = new THREE.Mesh(SCENERY_ASSETS.geos.cone, mat);
-  const w = 14 + Math.random() * 14;
-  const h = 8 + Math.random() * 12;
-  main.scale.set(w, h, w * 0.85);
-  main.position.y = h * 0.45;
+  const w = 32 + Math.random() * 28;
+  const h = 14 + Math.random() * 18;
+  main.scale.set(w, h, w * 0.62);
+  main.position.y = h * 0.36;
   g.add(main);
+  // 附带侧肩矮山峦，消除孤立圆锥角感
+  const sub = new THREE.Mesh(SCENERY_ASSETS.geos.cone, mat);
+  sub.scale.set(w * 0.72, h * 0.66, w * 0.52);
+  sub.position.set((Math.random() > 0.5 ? 1 : -1) * w * 0.42, h * 0.24, 3);
+  g.add(sub);
   return g;
 }
 
@@ -1954,33 +2061,63 @@ function applyTheme(themeKey) {
   }
   roadSegments.length = 0;
   sceneryObjects.length = 0;
+  distantHills.length = 0;
+  skyClouds.length = 0;
+  windStreaks.length = 0;
 
-  // 天空太阳光晕与立体白云背景（纯背景装饰，不改玩法逻辑）
-  const sunDisc = new THREE.Mesh(
-    new THREE.SphereGeometry(14, 16, 12),
-    new THREE.MeshBasicMaterial({ color: 0xfff8d6, fog: false })
+  // 全景渐变天空穹顶（自然渐变 + 高空柔云丝，随相机移动而不随地面晃动）
+  skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(480, 28, 16),
+    new THREE.MeshBasicMaterial({
+      map: makeSkyDomeTexture(themeKey, theme),
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false
+    })
   );
-  sunDisc.position.set(55, 52, -310);
-  worldGroup.add(sunDisc);
+  worldGroup.add(skyDome);
 
-  const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.72, fog: false });
-  const cloudGeo = new THREE.SphereGeometry(1, 8, 6);
-  for (let c = 0; c < 7; c++) {
-    const cl = new THREE.Group();
-    const cx = -95 + c * 32 + (Math.random() - 0.5) * 14;
-    const cy = 34 + (c % 3) * 6;
-    const cz = -160 - (c % 4) * 35;
-    [[-4.5, 0, 0, 5.2, 2.2, 3.2], [0, 1.1, 0, 7.0, 3.0, 3.8], [4.8, 0.2, 0.4, 5.0, 2.1, 3.0]].forEach(([px, py, pz, sx, sy, sz]) => {
-      const puff = new THREE.Mesh(cloudGeo, cloudMat);
-      puff.position.set(px, py, pz);
-      puff.scale.set(sx, sy, sz);
-      cl.add(puff);
+  // 远景天际层（太阳晕、羽化云层、远山山脉 —— 与近景公路彻底分离，拥有真实深度视差）
+  horizonGroup = new THREE.Group();
+  worldGroup.add(horizonGroup);
+
+  const sunCorona = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: WORLD_TEXTURES.sunHaloTex,
+    color: 0xfff6dc,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    fog: false
+  }));
+  sunCorona.position.set(110, 68, -330);
+  sunCorona.scale.set(120, 120, 1);
+  horizonGroup.add(sunCorona);
+
+  const cloudTint = new THREE.Color(0xffffff).lerp(new THREE.Color(theme.sunColor), 0.16);
+  const cloudCount = isMobileDevice ? 8 : 12;
+  for (let c = 0; c < cloudCount; c++) {
+    const cloudMat = new THREE.SpriteMaterial({
+      map: WORLD_TEXTURES.softCloudTex,
+      color: cloudTint,
+      transparent: true,
+      opacity: 0.56 + (c % 3) * 0.12,
+      depthWrite: false,
+      fog: false
     });
+    const cl = new THREE.Sprite(cloudMat);
+    const cx = -240 + (c / cloudCount) * 480 + (Math.random() - 0.5) * 35;
+    const cy = 44 + (c % 4) * 11;
+    const cz = -225 - (c % 3) * 48;
+    const w = 72 + (c % 3) * 26;
+    const h = w * 0.34;
     cl.position.set(cx, cy, cz);
-    worldGroup.add(cl);
+    cl.scale.set(w, h, 1);
+    cl.userData.drift = 0.015 + (c % 3) * 0.006;
+    horizonGroup.add(cl);
+    skyClouds.push(cl);
   }
 
-  // 所有路段共用同一批纹理、几何体与材质，兼具真实感与手机端高性能（加长搭接防止急弯接缝露底）
+  // 所有路段共用同一批纹理、几何体与材质，兼具真实感与手机端高性能（加长搭接防止深环形急弯接缝露底）
   const segSpan = ROAD_SEGMENT_LENGTH + 11.5;
   const waterColor = themeKey === "island" ? 0x16a8d6 : 0x267cb5;
   const segmentAssets = {
@@ -2074,17 +2211,30 @@ function applyTheme(themeKey) {
     sceneryObjects.push(item);
   }
 
-  // 外围远景起伏山峦轮廓，让道路延伸向真实地平线
-  const HILL_COUNT = isMobileDevice ? 8 : 14;
+  // 外围远景起伏山峦轮廓（放入 horizonGroup，深远稳重、低视差缓移，彻底消除“山比车跑得快”假象）
+  const HILL_COUNT = isMobileDevice ? 12 : 18;
   for (let h = 0; h < HILL_COUNT; h++) {
-    const hill = createDistantHill(themeKey);
-    const side = (themeKey === "river" || themeKey === "island") ? -1 : (h % 2 === 0 ? -1 : 1);
-    const hx = side * (38 + Math.random() * 26);
-    const hz = -(h * (540 / HILL_COUNT));
-    hill.position.set(hx, 0, hz);
-    hill.userData = { trackX: hx, baseY: 0 };
-    worldGroup.add(hill);
-    sceneryObjects.push(hill);
+    const hill = createDistantHill(themeKey, theme.fogColor);
+    const hx = -250 + (h / (HILL_COUNT - 1)) * 500 + (Math.random() - 0.5) * 24;
+    const hz = -215 - (h % 3) * 55 - Math.random() * 20;
+    hill.position.set(hx, -0.5, hz);
+    hill.rotation.y = (Math.random() - 0.5) * 1.1;
+    horizonGroup.add(hill);
+    distantHills.push(hill);
+  }
+
+  // 车身周围高速破风气流线（车速较高时围绕车侧向后掠过，大幅强化“车在前进”体感）
+  const streakGeo = new THREE.BoxGeometry(0.025, 0.025, 3.2);
+  const streakCount = isMobileDevice ? 10 : 18;
+  for (let s = 0; s < streakCount; s++) {
+    const smat = new THREE.MeshBasicMaterial({ color: 0xdff6ff, transparent: true, opacity: 0 });
+    const st = new THREE.Mesh(streakGeo, smat);
+    const side = s % 2 === 0 ? -1 : 1;
+    st.userData.sideOffset = side * (1.7 + Math.random() * 5.2);
+    st.userData.baseY = 0.28 + Math.random() * 1.45;
+    st.position.set(st.userData.sideOffset, st.userData.baseY, -Math.random() * 48);
+    worldGroup.add(st);
+    windStreaks.push(st);
   }
 }
 
@@ -2133,13 +2283,13 @@ function buildRoadSegment(zOffset, theme, assets, idx = 0) {
   if (!isMobileDevice) road.receiveShadow = true;
   seg.add(road);
 
-  // 道路白线
+  // 道路白线（均匀 12m 节奏，流畅地面速度参照）
   for (let i = 1; i < LANE_COUNT; i++) {
     const laneX = -ROAD_WIDTH / 2 + i * LANE_WIDTH;
     for (let s = 0; s < 2; s++) {
       const stripe = new THREE.Mesh(assets.stripeGeo, assets.stripeMat);
       stripe.rotation.x = -Math.PI / 2;
-      stripe.position.set(laneX, 0.04, -ROAD_SEGMENT_LENGTH / 2 + s * 14 + 3);
+      stripe.position.set(laneX, 0.04, -ROAD_SEGMENT_LENGTH / 2 + s * 12 + 6);
       seg.add(stripe);
     }
   }
@@ -2155,9 +2305,9 @@ function buildRoadSegment(zOffset, theme, assets, idx = 0) {
   seg.add(railR);
   if (!isMobileDevice) railR.castShadow = true;
 
-  // 连续的道路反光柱：强化道路边界、速度参照和两侧装饰层次。
-  for (let marker = 0; marker < Math.floor(ROAD_SEGMENT_LENGTH / 24); marker++) {
-    const z = -ROAD_SEGMENT_LENGTH / 2 + marker * 24 + 10;
+  // 连续的道路反光柱（每 12m 一对，强化两侧空间透视与贴地速度感）
+  for (let marker = 0; marker < 2; marker++) {
+    const z = -ROAD_SEGMENT_LENGTH / 2 + marker * 12 + 6;
     [-1, 1].forEach(side => {
       const post = new THREE.Group();
       const stem = new THREE.Mesh(assets.stemGeo, assets.stemMat);
@@ -2204,6 +2354,8 @@ function resetGame() {
   carPhysics.steerAngle = 0;
   carPhysics.roll = 0;
   carPhysics.rollVel = 0;
+  carPhysics.pitch = 0;
+  carPhysics.boostSpeed = 0;
 
   player.group.position.set(0, 0, 0);
   player.group.rotation.set(0, 0, 0);
@@ -2480,9 +2632,10 @@ function update() {
   if (!running) return;
   frame++;
 
-  // 1. 速度与加速
+  // 1. 速度与渐进加减速（真实刹车减速度 + 松油门惯性滑行 + 平滑氮气尾速）
   const accelerating = keys[keymap.throttle] || keys.ArrowUp || keys.throttle;
-  const wantsBoost = (keys[keymap.boost] || keys.ShiftLeft || keys.ShiftRight || keys.boost) && nitro > 0;
+  const braking = brakeHeld || keys.brake || keys[keymap.brake] || keys.ArrowDown;
+  const wantsBoost = !braking && (keys[keymap.boost] || keys.ShiftLeft || keys.ShiftRight || keys.boost) && nitro > 0;
 
   if (wantsBoost && !boosting) {
     sound.playBoost();
@@ -2520,18 +2673,21 @@ function update() {
 
   // 手机与电脑默认同速；键盘油门只略微提速，避免平台间速度差异过大。
   // 时速上限固定 200 km/h（currentSpeed 单位换算：×90 即 km/h）
-  const braking = brakeHeld || keys.brake || keys[keymap.brake] || keys.ArrowDown;
   const MAX_SPEED = 200 / 90;
   if (braking) {
-    baseSpeed = Math.max(0, baseSpeed - 0.05);
+    // 渐进刹车减速度（约 -86 km/h/s，从高速刹停约 2~2.5 秒，拒绝一踩即定）
+    baseSpeed = Math.max(0, baseSpeed - 0.016);
+    boosting = false;
   } else if (accelerating || throttleHeld) {
     baseSpeed = Math.min(MAX_SPEED, baseSpeed + 0.012);
   } else {
-    // 松开油门约 1 秒内停住，绝不会自己往前溜
-    baseSpeed = Math.max(0, baseSpeed - 0.02);
-    if (baseSpeed < 0.02) baseSpeed = 0;
+    // 松开油门保持真实滑行惯性，再平稳减速至停下
+    baseSpeed = Math.max(0, baseSpeed - 0.0055);
+    if (baseSpeed < 0.008) baseSpeed = 0;
   }
-  currentSpeed = Math.min(MAX_SPEED, baseSpeed + (boosting ? 0.35 : 0));
+  const targetBoostAdd = boosting ? 0.35 : 0;
+  carPhysics.boostSpeed += (targetBoostAdd - carPhysics.boostSpeed) * (boosting ? 0.14 : 0.06);
+  currentSpeed = Math.min(MAX_SPEED, baseSpeed + carPhysics.boostSpeed);
   raceDistance += (currentSpeed * 90) / 3.6 / 60;
   const progress = Math.min(1, raceDistance / finishDistance);
   finishGate.position.set(trackCurve(finishDistance), 0, -(finishDistance - raceDistance));
@@ -2619,29 +2775,40 @@ function update() {
   // 在面向 -Z 的右手坐标系中：
   // 朝向右侧 (+X) 需要绕 Y 轴顺时针旋转，即 rotation.y 为负 (-heading)
   // 朝向左侧 (-X) 需要绕 Y 轴逆时针旋转，即 rotation.y 为正 (-heading)
+  const speedRatio = Math.min(1, currentSpeed / (200 / 90));
+  const targetPitch = (braking && currentSpeed > 0.04)
+    ? -0.045
+    : (boosting ? 0.036 : ((accelerating || throttleHeld) && currentSpeed > 0.04 ? 0.020 : 0));
+  carPhysics.pitch += (targetPitch - carPhysics.pitch) * 0.14;
+
+  if (player.group.userData.tailMat) {
+    player.group.userData.tailMat.color.setHex(braking ? 0xff4e5c : 0xb81628);
+  }
+
   player.group.position.x = carPhysics.x + trackCurve(raceDistance);
-  player.group.position.y = Math.sin(frame * 0.16) * 0.012 + Math.abs(carPhysics.rollVel) * 0.018;
-  // 车身朝向 = 转向角 + 赛道切线方向，弯道上车头始终顺着路
+  player.group.position.y = Math.sin(raceDistance * 1.45) * 0.009 * speedRatio + Math.abs(carPhysics.rollVel) * 0.018;
+  // 车身朝向 = 转向角 + 赛道切线方向；加入加速抬头/刹车点头纵倾角，让车体动态清晰可见
   const roadSlope = (trackCurve(raceDistance + 4) - trackCurve(raceDistance - 4)) / 8;
   const roadYaw = Math.atan(roadSlope);
   player.group.rotation.y = -carPhysics.heading - roadYaw;
+  player.group.rotation.x = carPhysics.pitch + Math.sin(raceDistance * 1.1) * 0.003 * speedRatio;
   player.group.rotation.z = -carPhysics.roll;
 
   // 前轮机械打舵转向：向右打舵为负，向左打舵为正 (左右打舵清晰可见且方向与车头行进绝对一致！)
   player.wheels[0].steer.rotation.y = -carPhysics.steerAngle;
   player.wheels[1].steer.rotation.y = -carPhysics.steerAngle;
 
-  // 后轮固定 0 度无相对打角，四轮平滑滚动
+  // 后轮固定 0 度无相对打角；控制转速避开五辐 72° 频闪假静止区间，让轮毂清晰顺转
   player.wheels[2].steer.rotation.y = 0;
   player.wheels[3].steer.rotation.y = 0;
 
-  const wheelSpin = currentSpeed * 0.75;
+  const wheelSpin = currentSpeed * 0.46;
   player.wheels.forEach(w => {
     w.spin.rotation.x += wheelSpin;
   });
 
-  // 4. 赛道与自然景物流转 + 风车旋转
-  const moveZ = currentSpeed * 1.35;
+  // 4. 赛道与近景路侧景物流转 + 远景山脉低速真视差 + 车身破风气流
+  const moveZ = currentSpeed * 1.25;
   roadSegments.forEach(seg => {
     seg.position.z += moveZ;
     if (seg.position.z > ROAD_SEGMENT_LENGTH) {
@@ -2651,6 +2818,33 @@ function update() {
     seg.position.x = trackCurve(roadDistance);
     const curveSlope = (trackCurve(roadDistance + 2) - trackCurve(roadDistance - 2)) / 4;
     seg.rotation.y = -Math.atan(curveSlope);
+  });
+
+  // 远景山脉只做极慢纵向视差，不跟随近景赛道横向急甩，彻底消除“山动车不动”
+  distantHills.forEach(hill => {
+    hill.position.z += moveZ * 0.055;
+    if (hill.position.z > -185) {
+      hill.position.z -= 185;
+    }
+  });
+  skyClouds.forEach(cl => {
+    cl.position.x += cl.userData.drift || 0.016;
+    if (cl.position.x > 265) cl.position.x = -265;
+  });
+
+  // 高速破风气流丝线，贴着车身两侧向后疾掠
+  const streakAlpha = currentSpeed * 90 > 65 ? Math.min(0.62, (currentSpeed * 90 - 65) / 145 + (boosting ? 0.25 : 0)) : 0;
+  const trackNowX = trackCurve(raceDistance);
+  windStreaks.forEach(st => {
+    st.material.opacity = streakAlpha;
+    if (streakAlpha <= 0.01) return;
+    st.position.z += moveZ * 1.68 + 0.4;
+    if (st.position.z > 8) {
+      st.position.z = -38 - Math.random() * 20;
+    }
+    st.position.x = carPhysics.x + trackNowX + st.userData.sideOffset;
+    st.position.y = st.userData.baseY;
+    st.scale.z = 0.75 + speedRatio * 1.45 + (boosting ? 0.8 : 0);
   });
 
   sceneryObjects.forEach(item => {
@@ -2764,14 +2958,20 @@ function update() {
   const camFraming = getCameraFraming();
   const carWorldX = carPhysics.x + trackCurve(raceDistance);
   const lookSlope = (trackCurve(raceDistance + 25) - trackCurve(raceDistance)) / 25;
-  const targetCamX = carWorldX - carPhysics.heading * 1.15;
-  const speedRatio = Math.min(1, currentSpeed / (200 / 90));
-  const targetCamY = camFraming.baseY + (boosting ? -0.22 : 0) + speedRatio * 0.32;
-  const targetCamZ = camFraming.baseZ + (boosting ? 0.75 : 0) + speedRatio * 1.55;
+  const targetCamX = carWorldX - carPhysics.heading * 1.25;
+  const targetCamY = camFraming.baseY + (boosting ? -0.22 : 0) + speedRatio * 0.28;
+  const targetCamZ = camFraming.baseZ + (accelerating || throttleHeld ? 0.42 : 0) + (boosting ? 0.85 : 0) - (braking && currentSpeed > 0.04 ? 0.52 : 0) + speedRatio * 1.25;
 
-  camera.position.x += (targetCamX - camera.position.x) * 0.105;
+  camera.position.x += (targetCamX - camera.position.x) * 0.074;
   camera.position.y += (targetCamY - camera.position.y) * 0.1;
-  camera.position.z += (targetCamZ - camera.position.z) * 0.1;
+  camera.position.z += (targetCamZ - camera.position.z) * 0.072;
+
+  // 天空穹顶跟随相机保持无限远，远山图层只保留 12% 横向视差，表现车向远方驰骋
+  if (skyDome) skyDome.position.set(camera.position.x, 0, camera.position.z);
+  if (horizonGroup) {
+    horizonGroup.position.x = camera.position.x * 0.88;
+    horizonGroup.position.z = camera.position.z * 0.90;
+  }
 
   if (cameraTrauma > 0) {
     const p = Math.pow(cameraTrauma, 2);
@@ -2780,11 +2980,11 @@ function update() {
     cameraTrauma = Math.max(0, cameraTrauma - 0.04);
   }
 
-  const targetFov = camFraming.baseFov + (boosting ? 5.5 : 0) + speedRatio * 2.5;
+  const targetFov = camFraming.baseFov + (boosting ? 6.5 : 0) + speedRatio * 3.2;
   camera.fov += (targetFov - camera.fov) * 0.06;
   camera.updateProjectionMatrix();
 
-  const lookTargetX = carWorldX * 0.62 + camera.position.x * 0.38 + lookSlope * 22 + carPhysics.heading * 8.0;
+  const lookTargetX = carWorldX * 0.72 + camera.position.x * 0.28 + lookSlope * 13 + carPhysics.heading * 6.5;
   camera.lookAt(lookTargetX, camFraming.lookY, -16);
   const targetBank = -carPhysics.heading * 0.085 - carPhysics.roll * 0.35;
   cameraBank += (targetBank - cameraBank) * 0.14;
@@ -2814,6 +3014,13 @@ function render(timestamp = performance.now()) {
     steps += 1;
   }
   if (updateAccumulator > FIXED_STEP_MS * 2) updateAccumulator = FIXED_STEP_MS;
+  if (!running) {
+    skyClouds.forEach(cl => {
+      cl.position.x += (cl.userData.drift || 0.016) * 0.65;
+      if (cl.position.x > 265) cl.position.x = -265;
+    });
+    if (skyDome) skyDome.position.set(camera.position.x, 0, camera.position.z);
+  }
   renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
