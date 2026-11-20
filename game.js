@@ -41,7 +41,7 @@ let currentSpeed = 1.0;
 let boosting = false;
 let frame = 0;
 let raceDistance = 0;
-let finishDistance = 1500;
+let finishDistance = 5000;
 let throttleHeld = false;
 let lastTrafficAt = 0;      // 上次刷车时间（毫秒），按真实时间刷车，不受帧率影响
 let brakeHeld = false;
@@ -461,7 +461,7 @@ function triggerHaptic(durationOrPattern = 200) {
 // ═══════════════════════════════════════
 const scene = new THREE.Scene();
 const isMobileDevice = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, isMobileDevice ? 460 : 1000);
+const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.2, 1400);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobileDevice, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobileDevice ? 1.0 : 2));
@@ -521,23 +521,28 @@ const ROAD_SEGMENT_LENGTH = 24;
 const ROAD_SEGMENTS = 24;
 const TOTAL_ROAD_LEN = ROAD_SEGMENT_LENGTH * ROAD_SEGMENTS;
 
-// 赛道走向：《巅峰极速》风多弯道复合路线（发车直道 → 长右弧 → 连续S弯 → 环形发卡弯 → 反向回旋 → 末段压弯冲刺）
+// 赛道走向：《巅峰极速》风多弯道长环山公路（2400m 高复杂度九曲发卡 + 连续S弯复合回路，5~12km 依然全程高密过弯）
 function trackCurve(distance) {
   if (distance <= 0) return 0;
-  const period = 1500;
+  const period = 2400;
   const u = (distance % period) / period;
   const keys = [
     [0.00, 0],
-    [0.04, 0],
-    [0.12, 28],
-    [0.21, -24],
-    [0.31, 40],
-    [0.41, 56],
-    [0.53, -42],
-    [0.64, -56],
-    [0.75, 34],
-    [0.86, -26],
-    [0.94, 12],
+    [0.03, 0],       // 起跑双车格
+    [0.08, 32],      // 高速右切入弯
+    [0.14, -30],     // 紧接左反切 S 弯
+    [0.20, 44],      // 二连右扫弯
+    [0.26, -34],     // 三连左摆尾弯
+    [0.34, 72],      // 一号大半径环形山道发卡弯
+    [0.42, -26],     // 出弯反打 S 弯
+    [0.49, -68],     // 二号连续左折深发卡弯
+    [0.56, 36],      // 峡谷快节奏直角反切
+    [0.62, -48],     // 连续紧凑九曲 S 弯（左）
+    [0.68, 56],      // 连续紧凑九曲 S 弯（右）
+    [0.74, -52],     // 连续紧凑九曲 S 弯（左）
+    [0.82, -74],     // 三号超大外弧长发卡弯
+    [0.90, 52],      // 冲刺前反拉大右弯
+    [0.95, -20],     // 进线前小切弯
     [1.00, 0]
   ];
   let value = 0;
@@ -553,7 +558,7 @@ function trackCurve(distance) {
     if (u > t1) value = v1;
   }
   const rippleScale = Math.min(1, distance / 65);
-  return value + rippleScale * (3.6 * Math.sin(distance / 38) + 1.8 * Math.sin(distance / 19));
+  return value + rippleScale * (4.2 * Math.sin(distance / 36) + 2.0 * Math.sin(distance / 18));
 }
 
 const worldGroup = new THREE.Group();
@@ -669,20 +674,20 @@ const WORLD_TEXTURES = (() => {
     c.height = 128;
     const g = c.getContext("2d");
     g.clearRect(0, 0, 256, 128);
-    // 多层柔和渐变积云团：顶部受日照暖白，底部带淡蓝灰阴影，完全无几何硬边
+    // 所有渐变圆严格留白边距，避免纹理边缘被矩形裁切出竖线/横线；上白亮底灰蓝形成立体绵软云朵
     const puffs = [
-      [82, 74, 52, "rgba(218,229,244,0.34)"],
-      [134, 72, 60, "rgba(214,226,242,0.36)"],
-      [182, 76, 48, "rgba(220,231,245,0.30)"],
-      [68, 60, 44, "rgba(255,255,255,0.52)"],
-      [112, 48, 56, "rgba(255,255,255,0.68)"],
-      [158, 52, 50, "rgba(255,255,255,0.62)"],
-      [196, 62, 38, "rgba(255,255,255,0.44)"]
+      [78, 72, 34, "rgba(205,220,242,0.45)"],
+      [128, 74, 38, "rgba(198,214,238,0.48)"],
+      [178, 72, 34, "rgba(205,220,242,0.42)"],
+      [66, 58, 30, "rgba(255,255,255,0.78)"],
+      [104, 48, 36, "rgba(255,255,255,0.92)"],
+      [148, 48, 36, "rgba(255,255,255,0.88)"],
+      [188, 58, 28, "rgba(255,255,255,0.72)"]
     ];
     puffs.forEach(([px, py, pr, col]) => {
-      const grad = g.createRadialGradient(px, py, pr * 0.12, px, py, pr);
+      const grad = g.createRadialGradient(px, py, pr * 0.14, px, py, pr);
       grad.addColorStop(0, col);
-      grad.addColorStop(0.55, col.replace(/[\d.]+\)$/, "0.18)"));
+      grad.addColorStop(0.52, col.replace(/[\d.]+\)$/, "0.24)"));
       grad.addColorStop(1, "rgba(255,255,255,0)");
       g.fillStyle = grad;
       g.fillRect(0, 0, 256, 128);
@@ -819,27 +824,6 @@ function makeSkyDomeTexture(themeKey, theme) {
   grad.addColorStop(1.0, "#" + new THREE.Color(theme.fogColor).getHexString());
   g.fillStyle = grad;
   g.fillRect(0, 0, 1024, 512);
-
-  // 高空柔美卷云丝与远层积云散射（直接绘入穹顶，告别球体云塑料感）
-  for (let i = 0; i < 48; i++) {
-    const cx = ((Math.sin(i * 19.37) * 4321.9) % 1 + 1) % 1 * 1024;
-    const cy = 78 + (((Math.sin(i * 41.13) * 1923.7) % 1 + 1) % 1) * 120;
-    const rx = 55 + (i % 5) * 28;
-    const ry = 10 + (i % 3) * 6;
-    g.save();
-    g.translate(cx, cy);
-    g.scale(1, ry / rx);
-    const cg = g.createRadialGradient(0, 0, rx * 0.08, 0, 0, rx);
-    const alpha = 0.08 + (i % 4) * 0.035;
-    cg.addColorStop(0, `rgba(255,252,248,${alpha})`);
-    cg.addColorStop(0.5, `rgba(242,246,255,${alpha * 0.45})`);
-    cg.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = cg;
-    g.beginPath();
-    g.arc(0, 0, rx, 0, Math.PI * 2);
-    g.fill();
-    g.restore();
-  }
 
   const tex = new THREE.CanvasTexture(c);
   SKY_TEX_CACHE.set(themeKey, tex);
@@ -2065,9 +2049,9 @@ function applyTheme(themeKey) {
   skyClouds.length = 0;
   windStreaks.length = 0;
 
-  // 全景渐变天空穹顶（自然渐变 + 高空柔云丝，随相机移动而不随地面晃动）
+  // 纯净全景渐变天空穹顶（严格位于 camera.far=1400 内，无杂斑不穿帮、不出现旋转异物）
   skyDome = new THREE.Mesh(
-    new THREE.SphereGeometry(480, 28, 16),
+    new THREE.SphereGeometry(460, 28, 16),
     new THREE.MeshBasicMaterial({
       map: makeSkyDomeTexture(themeKey, theme),
       side: THREE.BackSide,
@@ -2077,42 +2061,45 @@ function applyTheme(themeKey) {
   );
   worldGroup.add(skyDome);
 
-  // 远景天际层（太阳晕、羽化云层、远山山脉 —— 与近景公路彻底分离，拥有真实深度视差）
+  // 远景天际层（高空日照光晕 + 平直柔和蓬松白云 + 远山山脉）
   horizonGroup = new THREE.Group();
   worldGroup.add(horizonGroup);
 
-  const sunCorona = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: WORLD_TEXTURES.sunHaloTex,
-    color: 0xfff6dc,
-    transparent: true,
-    opacity: 0.9,
-    depthWrite: false,
-    fog: false
-  }));
-  sunCorona.position.set(110, 68, -330);
-  sunCorona.scale.set(120, 120, 1);
+  const sunCorona = new THREE.Mesh(
+    new THREE.PlaneGeometry(76, 76),
+    new THREE.MeshBasicMaterial({
+      map: WORLD_TEXTURES.sunHaloTex,
+      color: 0xfff8de,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+      fog: false
+    })
+  );
+  sunCorona.position.set(120, 114, -360);
   horizonGroup.add(sunCorona);
 
-  const cloudTint = new THREE.Color(0xffffff).lerp(new THREE.Color(theme.sunColor), 0.16);
-  const cloudCount = isMobileDevice ? 8 : 12;
+  const cloudTint = new THREE.Color(0xffffff).lerp(new THREE.Color(theme.sunColor), 0.14);
+  const cloudPlaneGeo = new THREE.PlaneGeometry(1, 1);
+  const cloudCount = isMobileDevice ? 10 : 14;
   for (let c = 0; c < cloudCount; c++) {
-    const cloudMat = new THREE.SpriteMaterial({
+    const cloudMat = new THREE.MeshBasicMaterial({
       map: WORLD_TEXTURES.softCloudTex,
       color: cloudTint,
       transparent: true,
-      opacity: 0.56 + (c % 3) * 0.12,
+      opacity: 0.72 + (c % 3) * 0.08,
       depthWrite: false,
       fog: false
     });
-    const cl = new THREE.Sprite(cloudMat);
-    const cx = -240 + (c / cloudCount) * 480 + (Math.random() - 0.5) * 35;
-    const cy = 44 + (c % 4) * 11;
-    const cz = -225 - (c % 3) * 48;
-    const w = 72 + (c % 3) * 26;
-    const h = w * 0.34;
+    const cl = new THREE.Mesh(cloudPlaneGeo, cloudMat);
+    const cx = -240 + (c / cloudCount) * 480 + (Math.random() - 0.5) * 30;
+    const cy = 54 + (c % 4) * 11;
+    const cz = -240 - (c % 3) * 42;
+    const w = 68 + (c % 3) * 24;
+    const h = w * 0.44;
     cl.position.set(cx, cy, cz);
     cl.scale.set(w, h, 1);
-    cl.userData.drift = 0.015 + (c % 3) * 0.006;
+    cl.userData.drift = 0.014 + (c % 3) * 0.005;
     horizonGroup.add(cl);
     skyClouds.push(cl);
   }
@@ -2344,7 +2331,7 @@ function resetGame() {
   baseSpeed = 0;
   frame = 0;
   raceDistance = 0;
-  finishDistance = Number(document.querySelector("#raceLength")?.value || 1500);
+  finishDistance = Number(document.querySelector("#raceLength")?.value || 5000);
   document.querySelector("#raceProgressBar").style.width = "0%";
   document.querySelector("#raceProgressText").textContent = `0 / ${finishDistance} m`;
   cameraTrauma = 0;
@@ -2536,7 +2523,7 @@ function drawMinimap() {
   const viewRangeAhead = 215;
   const m2px = (playerScreenY - 6) / viewRangeAhead;
   const baseTrackX = trackCurve(raceDistance);
-  const toRadarX = (worldX) => cx + (worldX - baseTrackX - carPhysics.x) * m2px * 1.45;
+  const toRadarX = (worldX) => cx + (worldX - baseTrackX - carPhysics.x) * m2px * 1.15;
   const toRadarY = (relAheadMeters) => playerScreenY - relAheadMeters * m2px;
 
   // 赛道公路带
@@ -2548,12 +2535,12 @@ function drawMinimap() {
   ctx.beginPath();
   for (let i = 0; i <= 32; i++) {
     const d = minD + ((maxD - minD) * i) / 32;
-    const px = cx + (trackCurve(d) - baseTrackX - carPhysics.x) * m2px * 1.45;
+    const px = cx + (trackCurve(d) - baseTrackX - carPhysics.x) * m2px * 1.15;
     const py = toRadarY(d - raceDistance);
     if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
   }
   ctx.strokeStyle = "rgba(85, 195, 255, 0.25)";
-  ctx.lineWidth = Math.max(7, ROAD_WIDTH * m2px * 1.35);
+  ctx.lineWidth = Math.max(7, ROAD_WIDTH * m2px * 1.15);
   ctx.stroke();
   ctx.strokeStyle = "rgba(185, 240, 255, 0.58)";
   ctx.lineWidth = 1.4;
@@ -2562,7 +2549,7 @@ function drawMinimap() {
   // 终点线若在雷达视野内则画出金黄格子标
   const finishRel = total - raceDistance;
   if (finishRel >= -30 && finishRel <= viewRangeAhead + 20) {
-    const fx = cx + (trackCurve(total) - baseTrackX - carPhysics.x) * m2px * 1.45;
+    const fx = cx + (trackCurve(total) - baseTrackX - carPhysics.x) * m2px * 1.15;
     const fy = toRadarY(finishRel);
     ctx.fillStyle = "#ffd65c";
     ctx.fillRect(fx - 8, fy - 2, 16, 4);

@@ -130,7 +130,12 @@
           </label>
           <label class="race-length-field">
             <span>比赛距离</span>
-            <select id="raceLength"><option value="1500">短程 1.5 km</option><option value="3000">标准 3 km</option></select>
+            <select id="raceLength">
+              <option value="3000">热身 3 km（快速）</option>
+              <option value="5000" selected>标准 5 km（推荐）</option>
+              <option value="8000">长途 8 km（耐力）</option>
+              <option value="12000">马拉松 12 km（超长）</option>
+            </select>
           </label>
           <label class="race-length-field">
             <span>车流难度</span>
@@ -193,6 +198,6 @@
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=91"></script>
+  <script src="game.js?v=92"></script>
 </body>
 </html>
