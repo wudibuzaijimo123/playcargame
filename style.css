@@ -1039,6 +1039,32 @@ p {
 .room-controls #leaveRoom { display: none; border-color: rgba(255, 110, 130, .55); color: #ffb8c4; background: rgba(68, 16, 30, .82); }
 .room-controls.in-room .room-join-row { display: none; }
 .room-controls.in-room #leaveRoom { display: block; }
+.room-slots { display: none; grid-template-columns: 1fr 1fr; gap: 8px; margin: 2px 0; }
+.room-controls.in-room .room-slots { display: grid; }
+.slot-card {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 229, 255, .28);
+  background: rgba(10, 22, 54, .75);
+  text-align: left;
+}
+.slot-card.empty { border-style: dashed; border-color: rgba(150, 185, 225, .28); opacity: .78; }
+.slot-card.ready { border-color: rgba(43, 232, 158, .75); background: rgba(10, 52, 46, .58); }
+.slot-role { font-size: 11px; font-weight: 800; color: #ffe07d; }
+.slot-name { font-size: 13px; font-weight: 800; color: #f2f8ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-badge {
+  display: inline-block;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(120, 150, 195, .22);
+  color: #b7cef0;
+}
+.slot-card.ready .slot-badge { background: rgba(43, 232, 158, .24); color: #5effc2; }
 #roomStatus { color: #95b2de; font-size: 12px; line-height: 1.45; }
 .room-controls.in-room #roomStatus { color: #76f6ff; }
 
