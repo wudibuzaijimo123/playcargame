@@ -482,6 +482,7 @@ renderer.shadowMap.enabled = !isMobileDevice;   // 手机端关阴影，帧率�
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 let cameraBank = 0;
+let cameraYaw = 0;
 function getCameraFraming() {
   const aspect = Math.max(0.35, window.innerWidth / Math.max(1, window.innerHeight));
   // 竖屏手机适度放宽视野并后撤拉高镜头，保证三车道、护栏与风景清晰可见，且车位于操作区上方
@@ -2584,6 +2585,8 @@ function resetGame() {
   document.querySelector("#raceProgressBar").style.width = "0%";
   document.querySelector("#raceProgressText").textContent = `0 / ${finishDistance} m`;
   cameraTrauma = 0;
+  cameraBank = 0;
+  cameraYaw = 0;
 
   carPhysics.x = 0;
   carPhysics.heading = 0;
@@ -3167,16 +3170,20 @@ function update(dtScale = 1) {
   if (frame % (isMobileDevice ? 6 : 4) === 0) drawMinimap();
   const camFraming = getCameraFraming();
   const carWorldX = playerPt.x;
-  const lookAheadPt = trackWorldPoint(raceDistance + 20, carPhysics.x * 0.45, 0);
   const roadYaw = -playerPt.yaw;
-  const followDist = camFraming.baseZ + (accelerating || throttleHeld ? 0.40 : 0) + (boosting ? 0.82 : 0) - (braking && currentSpeed > 0.04 ? 0.48 : 0) + speedRatio * 1.15;
-  const targetCamX = carWorldX - Math.sin(roadYaw) * followDist - carPhysics.heading * 1.35;
-  const targetCamY = playerPt.y + camFraming.baseY + (boosting ? -0.20 : 0) + speedRatio * 0.26;
-  const targetCamZ = playerPt.z + Math.cos(roadYaw) * followDist;
+  const carFaceYaw = roadYaw + carPhysics.heading;
+  const yawFollowTarget = roadYaw + carPhysics.heading * 0.86;
+  cameraYaw += (yawFollowTarget - cameraYaw) * expEase(0.16);
 
-  camera.position.x += (targetCamX - camera.position.x) * expEase(0.145);
-  camera.position.y += (targetCamY - camera.position.y) * expEase(0.14);
-  camera.position.z += (targetCamZ - camera.position.z) * expEase(0.14);
+  const camDist = camFraming.baseZ + (accelerating || throttleHeld ? 0.36 : 0) + (boosting ? 0.85 : 0) - (braking && currentSpeed > 0.04 ? 0.45 : 0) + speedRatio * 1.1;
+  const driftPeek = Math.sin(carFaceYaw - cameraYaw) * 1.15;
+  const targetCamX = playerPt.x - Math.sin(cameraYaw) * camDist - driftPeek * Math.cos(cameraYaw);
+  const targetCamY = playerPt.y + camFraming.baseY + (boosting ? -0.18 : 0) + speedRatio * 0.24;
+  const targetCamZ = playerPt.z + Math.cos(cameraYaw) * camDist - driftPeek * Math.sin(cameraYaw);
+
+  camera.position.x += (targetCamX - camera.position.x) * expEase(0.42);
+  camera.position.y += (targetCamY - camera.position.y) * expEase(0.24);
+  camera.position.z += (targetCamZ - camera.position.z) * expEase(0.42);
 
   sunLight.position.set(carWorldX + 26, 52, 22);
   sunLight.target.position.set(carWorldX, 0, -24);
@@ -3199,8 +3206,11 @@ function update(dtScale = 1) {
   camera.fov += (targetFov - camera.fov) * expEase(0.08);
   camera.updateProjectionMatrix();
 
-  const lookTargetX = lookAheadPt.x * 0.72 + carWorldX * 0.28 + carPhysics.heading * 5.2;
-  const lookTargetZ = lookAheadPt.z;
+  const noseLookX = playerPt.x + Math.sin(cameraYaw) * 16;
+  const noseLookZ = playerPt.z - Math.cos(cameraYaw) * 16;
+  const roadAheadPt = trackWorldPoint(raceDistance + 16, carPhysics.x * 0.65, 0);
+  const lookTargetX = noseLookX * 0.80 + roadAheadPt.x * 0.20;
+  const lookTargetZ = noseLookZ * 0.80 + roadAheadPt.z * 0.20;
   camera.lookAt(lookTargetX, playerPt.y + camFraming.lookY, lookTargetZ);
   const targetBank = -carPhysics.heading * 0.075 - carPhysics.roll * 0.30 + playerPt.bankAngle * 0.45;
   cameraBank += (targetBank - cameraBank) * expEase(0.15);
