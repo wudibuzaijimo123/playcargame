@@ -157,6 +157,7 @@ class MusicEngine {
     this.coinAudio = null;
     this.customTrackUrl = "";
     this.customTrackTitle = "";
+    this.errorSkips = 0;
     this.ctx = null;
     this.engineGain = null;
     this.engineOsc = null;
@@ -204,6 +205,15 @@ class MusicEngine {
       this.bgmAudio.addEventListener("ended", () => {
         if (!this.enabled || this.customTrackUrl) return;
         this.nextTrack(true);
+      });
+      this.bgmAudio.addEventListener("error", () => {
+        if (!this.enabled || this.customTrackUrl || this.errorSkips >= GEM_PLAYLIST.length) return;
+        this.errorSkips += 1;
+        this.nextTrack(true);
+      });
+      this.bgmAudio.addEventListener("playing", () => {
+        this.errorSkips = 0;
+        syncAudioUI();
       });
       this.bgmAudio.addEventListener("play", () => syncAudioUI());
       this.bgmAudio.addEventListener("pause", () => syncAudioUI());
