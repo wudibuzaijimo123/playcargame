@@ -709,6 +709,18 @@ p {
   transform: none;
 }
 
+.start.is-ready {
+  background: linear-gradient(95deg, #2be89e 0%, #00c48c 55%, #069c78 100%);
+  color: #032118;
+  box-shadow: 0 8px 24px rgba(43, 232, 158, 0.36);
+}
+
+.start.ready-prompt {
+  background: linear-gradient(95deg, #ffe270 0%, #ff9f2e 55%, #ff5f40 100%);
+  color: #1d0902;
+  box-shadow: 0 10px 28px rgba(255, 166, 48, 0.48);
+}
+
 .tips {
   margin-top: 10px;
   color: rgba(154, 178, 218, 0.85);
