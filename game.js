@@ -523,37 +523,37 @@ const TOTAL_ROAD_LEN = ROAD_SEGMENT_LENGTH * ROAD_SEGMENTS;
 
 // 赛道走向：《巅峰极速》风多弯道复合路线（发车直道 → 长右弧 → 连续S弯 → 环形发卡弯 → 反向回旋 → 末段压弯冲刺）
 function trackCurve(distance) {
-  const total = Math.max(300, finishDistance || 1500);
-  const t = Math.max(0, Math.min(1, distance / total));
-  // 关键节点：位置(0..1) → 横向偏移(米)
+  if (distance <= 0) return 0;
+  const period = 1500;
+  const u = (distance % period) / period;
   const keys = [
     [0.00, 0],
-    [0.06, 0],      // 发车加速直道
-    [0.16, 24],     // 高速长右弧弯
-    [0.26, -20],    // 连续左切 S 弯
-    [0.36, 30],     // 连续右转大弯
-    [0.44, 34],     // 环形盘旋大发卡弯顶
-    [0.54, -28],    // 反向横切回旋弯
-    [0.64, -34],    // 二号环形发卡弯
-    [0.74, 22],     // 后段连续 S 弯摆尾
-    [0.84, -18],    // 进直道前压弯切线
-    [0.92, 0],      // 回正准备全速冲线
+    [0.04, 0],
+    [0.12, 28],
+    [0.21, -24],
+    [0.31, 40],
+    [0.41, 56],
+    [0.53, -42],
+    [0.64, -56],
+    [0.75, 34],
+    [0.86, -26],
+    [0.94, 12],
     [1.00, 0]
   ];
   let value = 0;
   for (let i = 0; i < keys.length - 1; i++) {
     const [t0, v0] = keys[i];
     const [t1, v1] = keys[i + 1];
-    if (t >= t0 && t <= t1) {
-      const k = (t - t0) / Math.max(1e-6, t1 - t0);
-      const smooth = k * k * (3 - 2 * k);   // 平滑插值，进出弯都不突兀
+    if (u >= t0 && u <= t1) {
+      const k = (u - t0) / Math.max(1e-6, t1 - t0);
+      const smooth = k * k * (3 - 2 * k);
       value = v0 + (v1 - v0) * smooth;
       break;
     }
-    if (t > t1) value = v1;
+    if (u > t1) value = v1;
   }
-  // 叠加自然蜿蜒，直线也富有路面节奏感
-  return value + 3.2 * Math.sin(distance / 48) + 1.6 * Math.sin(distance / 21);
+  const rippleScale = Math.min(1, distance / 65);
+  return value + rippleScale * (3.6 * Math.sin(distance / 38) + 1.8 * Math.sin(distance / 19));
 }
 
 const worldGroup = new THREE.Group();
@@ -1981,7 +1981,7 @@ function applyTheme(themeKey) {
   }
 
   // 所有路段共用同一批纹理、几何体与材质，兼具真实感与手机端高性能（加长搭接防止急弯接缝露底）
-  const segSpan = ROAD_SEGMENT_LENGTH + 3.2;
+  const segSpan = ROAD_SEGMENT_LENGTH + 11.5;
   const waterColor = themeKey === "island" ? 0x16a8d6 : 0x267cb5;
   const segmentAssets = {
     themeKey,
