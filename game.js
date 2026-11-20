@@ -396,6 +396,9 @@ class MusicEngine {
       this.startBGM();
     } else {
       if (this.bgmAudio) this.bgmAudio.pause();
+      if (this.engineGain && this.ctx) {
+        this.engineGain.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.03);
+      }
     }
     return this.enabled;
   }
