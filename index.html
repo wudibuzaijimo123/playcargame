@@ -93,7 +93,7 @@
     <span id="impactValue">小心碰撞</span>
   </div>
 
-  <div class="sound-status" id="soundStatus">🔊 音乐已开启（点右上角喇叭可随时静音）</div>
+  <div class="sound-status" id="soundStatus">🔊 音乐与特效音默认开启（点右上角喇叭可随时静音）</div>
 
   <div class="controls">
     <div class="steering-mode" role="group" aria-label="选择转向方式">
@@ -176,6 +176,16 @@
           </label>
         </div>
 
+        <!-- 开局自动转向辅助选择 -->
+        <section class="menu-section auto-steering-selector" role="group" aria-label="自动转向选择">
+          <div class="theme-label">自动转向</div>
+          <div class="menu-steering-options">
+            <button class="steering-choice active" id="autoSteerOff" type="button" aria-pressed="true">关闭（手动）</button>
+            <button class="steering-choice" id="autoSteerOn" type="button" aria-pressed="false">开启（自动回正）</button>
+          </div>
+          <div class="steering-help" id="autoSteerHelp">手动驾驶：车辆方向由按键或手机倾斜控制。</div>
+        </section>
+
         <!-- 更多设置（操控 / 快捷键 / 声音） -->
         <details class="menu-more" id="menuMore">
           <summary>⚙️ 操控与声音设置</summary>
@@ -239,6 +249,6 @@
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=101"></script>
+  <script src="game.js?v=102"></script>
 </body>
 </html>
