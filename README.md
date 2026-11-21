@@ -6,9 +6,9 @@ GitHub（纯单机版）：<https://github.com/wudibuzaijimo123/playcargame>
 离线单机版 · PlayCarGame（3D 公路竞速）
 在线演示（GitHub Pages 纯静态）：https://wudibuzaijimo123.github.io/playcargame/
 GitHub（纯单机版）：https://github.com/wudibuzaijimo123/playcargame
-双人联机版仓库[在线演示
-](https://api.game.yhj123.dpdns.org)
-仓库:https://.github.com/wudibuzaijimo123/zaixianyouxi
+双人联机版
+在线演示(https://api.game.yhj123.dpdns.org)
+仓库:https://github.com/wudibuzaijimo123/zaixianyouxi
 
 纯前端纯单机版本：不连后端、无需任何数据库或联机配置，所有成绩保存在本地浏览器 `localStorage`，适合单人刷纪录或离线托管到任意静态服务器（Nginx / GitHub Pages / 本地 localhost）。
 
