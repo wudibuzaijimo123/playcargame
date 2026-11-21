@@ -138,6 +138,44 @@
         </section>
 
         <!-- 车身涂装颜色选择 -->
+        <section class="menu-section car-color-selector">
+          <div class="theme-label">车身颜色 <small id="carColorName">岩石灰</small></div>
+          <div class="car-color-swatches" id="carColorSwatches" role="radiogroup" aria-label="选择汽车颜色">
+            <button class="color-swatch active" type="button" data-color="#4a525d" data-name="岩石灰" title="岩石灰" style="--swatch:#4a525d"></button>
+            <button class="color-swatch" type="button" data-color="#eef2f7" data-name="珍珠白" title="珍珠白" style="--swatch:#eef2f7"></button>
+            <button class="color-swatch" type="button" data-color="#d6222c" data-name="烈焰红" title="烈焰红" style="--swatch:#d6222c"></button>
+            <button class="color-swatch" type="button" data-color="#1d6ef5" data-name="赛道蓝" title="赛道蓝" style="--swatch:#1d6ef5"></button>
+            <button class="color-swatch" type="button" data-color="#1e232b" data-name="曜石黑" title="曜石黑" style="--swatch:#1e232b"></button>
+            <button class="color-swatch" type="button" data-color="#eb5e18" data-name="熔岩橙" title="熔岩橙" style="--swatch:#eb5e18"></button>
+            <button class="color-swatch" type="button" data-color="#eab322" data-name="鎏金黄" title="鎏金黄" style="--swatch:#eab322"></button>
+            <button class="color-swatch" type="button" data-color="#178f59" data-name="苍翠绿" title="苍翠绿" style="--swatch:#178f59"></button>
+          </div>
+        </section>
+
+        <div class="menu-row">
+          <label class="name-field">
+            <span>车手昵称</span>
+            <input id="playerName" maxlength="16" placeholder="输入你的车手名" autocomplete="nickname">
+          </label>
+          <label class="race-length-field">
+            <span>比赛距离</span>
+            <select id="raceLength">
+              <option value="3000">热身 3 km（快速）</option>
+              <option value="5000" selected>标准 5 km（推荐）</option>
+              <option value="8000">长途 8 km（耐力）</option>
+              <option value="12000">马拉松 12 km（超长）</option>
+            </select>
+          </label>
+          <label class="race-length-field">
+            <span>车流难度</span>
+            <select id="difficultySelect">
+              <option value="easy">🟢 休闲（稀疏）</option>
+              <option value="normal" selected>🟡 标准（默认）</option>
+              <option value="hard">🔴 地狱（高频）</option>
+            </select>
+          </label>
+        </div>
+
         <!-- 自动回正状态 -->
         <section class="menu-section auto-steering-selector" aria-label="自动转向">
           <div class="theme-label">自动转向</div>
