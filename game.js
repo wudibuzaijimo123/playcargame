@@ -4541,7 +4541,14 @@ function update(dtScale = 1) {
     }
   }
   const stepMeters = ((currentSpeed * 90) / 3.6 / 60) * dtScale;
+  const roadFrameBefore = autoSteeringEnabled ? null : trackWorldPoint(raceDistance, 0, 0);
   raceDistance += stepMeters;
+  if (roadFrameBefore) {
+    const roadFrameAfter = trackWorldPoint(raceDistance, 0, 0);
+    // 手动模式下抵消道路中心线带来的横移和转角，让车身保持实际航向。
+    carPhysics.x -= roadFrameAfter.x - roadFrameBefore.x;
+    carPhysics.heading += roadFrameAfter.yaw - roadFrameBefore.yaw;
+  }
   const progress = Math.min(1, raceDistance / finishDistance);
   const gatePt = trackWorldPoint(finishDistance, 0, 0);
   finishGate.position.set(gatePt.x, gatePt.y, gatePt.z);
@@ -4604,7 +4611,12 @@ function update(dtScale = 1) {
     carPhysics.heading += (0 - carPhysics.heading) * Math.min(1.0, PHYS.headingAlignRate * dt * 3.2);
   }
 
-  carPhysics.heading = Math.max(-PHYS.maxHeading, Math.min(PHYS.maxHeading, carPhysics.heading));
+  if (autoSteeringEnabled) {
+    carPhysics.heading = Math.max(-PHYS.maxHeading, Math.min(PHYS.maxHeading, carPhysics.heading));
+  } else {
+    // 手动模式不把车头限制在赛道方向附近，只对角度做周期归一化。
+    carPhysics.heading = Math.atan2(Math.sin(carPhysics.heading), Math.cos(carPhysics.heading));
+  }
 
   const forwardVel = currentSpeed * 17.0;
   const lateralVel = forwardVel * Math.sin(carPhysics.heading);
