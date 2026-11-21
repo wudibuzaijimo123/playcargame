@@ -26,9 +26,6 @@ const buttonMode = document.querySelector("#buttonMode");
 const tiltMode = document.querySelector("#tiltMode");
 const menuButtonMode = document.querySelector("#menuButtonMode");
 const menuTiltMode = document.querySelector("#menuTiltMode");
-const autoSteerOff = document.querySelector("#autoSteerOff");
-const autoSteerOn = document.querySelector("#autoSteerOn");
-const autoSteerHelp = document.querySelector("#autoSteerHelp");
 const steeringHelp = document.querySelector("#steeringHelp");
 const impactHud = document.querySelector("#impactHud");
 const impactValue = document.querySelector("#impactValue");
@@ -55,8 +52,7 @@ let tiltEnabled = false;
 let tiltSteer = 0;
 let tiltCenter = null;
 let steeringMode = "buttons";
-const AUTO_STEER_STORAGE = "racerAutoSteerV2";
-let autoSteeringEnabled = localStorage.getItem(AUTO_STEER_STORAGE) !== "0";
+const autoSteeringEnabled = true;
 const keys = {};
 
 // ── 可自定义快捷键（默认：W 油门 / S 刹车 / Shift 加速 / ←→ 转向）──
@@ -5082,28 +5078,6 @@ tiltMode?.addEventListener("click", () => {
 menuTiltMode?.addEventListener("click", () => {
   if (!tiltEnabled) toggleTiltSteering();
 });
-
-function updateAutoSteeringUI() {
-  autoSteerOff?.classList.toggle("active", !autoSteeringEnabled);
-  autoSteerOn?.classList.toggle("active", autoSteeringEnabled);
-  autoSteerOff?.setAttribute("aria-pressed", String(!autoSteeringEnabled));
-  autoSteerOn?.setAttribute("aria-pressed", String(autoSteeringEnabled));
-  if (autoSteerHelp) {
-    autoSteerHelp.textContent = autoSteeringEnabled
-      ? "自动回正：松开方向后回到当前车道中心；按键或倾斜可随时覆盖，不会自动躲车。"
-      : "手动驾驶：车辆方向由按键或手机倾斜控制。";
-  }
-}
-
-function setAutoSteering(enabled) {
-  autoSteeringEnabled = Boolean(enabled);
-  localStorage.setItem(AUTO_STEER_STORAGE, autoSteeringEnabled ? "1" : "0");
-  updateAutoSteeringUI();
-}
-
-autoSteerOff?.addEventListener("click", () => setAutoSteering(false));
-autoSteerOn?.addEventListener("click", () => setAutoSteering(true));
-updateAutoSteeringUI();
 
 function bindButton(selector, key) {
   const element = document.querySelector(selector);
