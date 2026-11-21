@@ -26,6 +26,9 @@ const buttonMode = document.querySelector("#buttonMode");
 const tiltMode = document.querySelector("#tiltMode");
 const menuButtonMode = document.querySelector("#menuButtonMode");
 const menuTiltMode = document.querySelector("#menuTiltMode");
+const autoSteerOff = document.querySelector("#autoSteerOff");
+const autoSteerOn = document.querySelector("#autoSteerOn");
+const autoSteerHelp = document.querySelector("#autoSteerHelp");
 const steeringHelp = document.querySelector("#steeringHelp");
 const impactHud = document.querySelector("#impactHud");
 const impactValue = document.querySelector("#impactValue");
@@ -52,6 +55,8 @@ let tiltEnabled = false;
 let tiltSteer = 0;
 let tiltCenter = null;
 let steeringMode = "buttons";
+const AUTO_STEER_STORAGE = "racerAutoSteer";
+let autoSteeringEnabled = localStorage.getItem(AUTO_STEER_STORAGE) === "1";
 const keys = {};
 
 // ── 可自定义快捷键（默认：W 油门 / S 刹车 / Shift 加速 / ←→ 转向）──
@@ -114,7 +119,7 @@ function setMenuVisible(visible) {
     document.body.classList.remove("boosting-fx");
     if (typeof player !== "undefined" && player.group?.userData) {
       if (player.group.userData.nitroFlames) player.group.userData.nitroFlames.visible = false;
-      if (player.group.userData.burnoutGlows) player.group.userData.burnoutGlows.visible = false;
+      if (player.group.userData.burnoutMarks) player.group.userData.burnoutMarks.visible = false;
     }
     if (typeof carPhysics !== "undefined") {
       carPhysics.burningOut = false;
@@ -581,7 +586,7 @@ function syncVolumeSlidersUI() {
   });
 })();
 
-// 静音/开启状态同步到界面（默认静音，点右上角喇叭才出声）
+// 静音/开启状态同步到界面（音乐与特效音默认开启）
 function syncAudioUI() {
   const on = sound.enabled;
   const track = sound.currentTrack();
@@ -592,11 +597,11 @@ function syncAudioUI() {
   if (audioToggle) {
     audioToggle.textContent = on ? "🔊" : "🔇";
     audioToggle.style.opacity = on ? "1" : "0.55";
-    audioToggle.title = on ? "关闭音乐音效" : "开启音乐音效（默认静音）";
+    audioToggle.title = on ? "关闭音乐音效" : "开启音乐音效";
   }
   if (soundStatus) {
     soundStatus.textContent = on
-      ? (isPlaying ? `🔊 正在播放：${trackLabel}` : `🔊 音乐已启用 · 轻触屏幕播：${track.title}`)
+      ? (isPlaying ? `🔊 正在播放：${trackLabel}` : `🔊 音乐与特效音已启用 · 轻触屏幕播放：${track.title}`)
       : "🔇 已手动静音（点右上角喇叭可恢复）";
   }
   const musicNameEl = document.querySelector("#customMusicName");
@@ -2744,39 +2749,24 @@ function createTeslaCar(isPlayer = true, colorHex = DEFAULT_CAR_COLOR, isRival =
     carGroup.add(nitroFlames);
     carGroup.userData.nitroFlames = nitroFlames;
 
-    // 原地烧胎后轮灼热红橙光晕 + 胎印热痕（贴地不穿模）
-    const burnoutGlows = new THREE.Group();
-    const glowMat = new THREE.MeshBasicMaterial({
-      map: WORLD_TEXTURES.heatGlowTex,
-      transparent: true,
-      opacity: 0.0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
+    // 原地烧胎只保留后轮胎印，轮胎热度由柔和烟雾表现
+    const burnoutMarks = new THREE.Group();
     const skidMat = new THREE.MeshBasicMaterial({
       color: 0x111216,
       transparent: true,
       opacity: 0.0,
       depthWrite: false
     });
-    const glowGeo = new THREE.PlaneGeometry(1.75, 2.05);
     const skidGeo = new THREE.PlaneGeometry(0.46, 2.35);
     [-0.98, 0.98].forEach(bx => {
       const skid = new THREE.Mesh(skidGeo, skidMat);
       skid.rotation.x = -Math.PI / 2;
       skid.position.set(bx, 0.044, 0.85);
-      burnoutGlows.add(skid);
-
-      const gMesh = new THREE.Mesh(glowGeo, glowMat);
-      gMesh.rotation.x = -Math.PI / 2;
-      gMesh.position.set(bx, 0.052, 0.14);
-      gMesh.userData.isHeatRing = true;
-      burnoutGlows.add(gMesh);
+      burnoutMarks.add(skid);
     });
-    burnoutGlows.visible = false;
-    carGroup.add(burnoutGlows);
-    carGroup.userData.burnoutGlows = burnoutGlows;
-    carGroup.userData.burnoutGlowMat = glowMat;
+    burnoutMarks.visible = false;
+    carGroup.add(burnoutMarks);
+    carGroup.userData.burnoutMarks = burnoutMarks;
     carGroup.userData.burnoutSkidMat = skidMat;
   }
 
@@ -3207,8 +3197,16 @@ function nearestLaneCenter(x) {
 }
 
 function applyLaneKeeping(x) {
-  // 取消车道自动吸附，允许车手完全自由控制横向位置、顺畅穿行两车缝隙
+  // 默认保持完全手动，不强制把车辆吸附到车道中心。
   return x;
+}
+
+function getAutoSteeringInput(x, heading) {
+  if (!autoSteeringEnabled || currentSpeed < LANE_KEEPING_MIN_SPEED) return 0;
+  const laneError = nearestLaneCenter(x) - x;
+  const correction = laneError * (LANE_KEEPING_STRENGTH * 0.035) - heading * 0.72;
+  const input = Math.max(-0.58, Math.min(0.58, correction));
+  return Math.abs(input) < 0.025 ? 0 : input;
 }
 
 function vehiclesOverlap(first, second) {
@@ -3371,7 +3369,7 @@ function createSpark(x, y, z, colorHex, count = 12) {
   }
 }
 
-// 原地烧胎浓密立体轮胎白烟（双后轮向左右外侧与上方翻涌成双烟柱，清晰不挡镜）+ 炽热抛物线火星
+// 原地烧胎柔和扩散轮胎烟雾（双后轮向外与上方翻卷）
 function spawnBurnoutSmokeForCar(carGroup, intensity = 0.8) {
   if (!carGroup || particles.length > (isMobileDevice ? 80 : 145)) return;
   const pos = carGroup.position;
@@ -3389,11 +3387,11 @@ function spawnBurnoutSmokeForCar(carGroup, intensity = 0.8) {
       map: WORLD_TEXTURES.smokePuffTex,
       color: (shade << 16) | (shade << 8) | Math.min(255, shade + 6),
       transparent: true,
-      opacity: 0.44 + intensity * 0.24,
+      opacity: 0.34 + intensity * 0.14,
       depthWrite: false
     });
     const puff = new THREE.Sprite(mat);
-    const startScale = 0.48 + Math.random() * 0.24 + intensity * 0.22;
+    const startScale = 0.52 + Math.random() * 0.24 + intensity * 0.18;
     puff.scale.set(startScale, startScale, 1);
     puff.position.set(wx, wy, wz);
     scene.add(puff);
@@ -3407,52 +3405,11 @@ function spawnBurnoutSmokeForCar(carGroup, intensity = 0.8) {
       vy: 0.048 + Math.random() * 0.038 + intensity * 0.024,
       vz: cosY * backSpeed - sinY * sideOut + (Math.random() - 0.5) * 0.025,
       scale: startScale,
-      grow: 0.032 + intensity * 0.018,
+      grow: 0.024 + intensity * 0.012,
       maxOpacity: mat.opacity,
-      decay: 0.032 + Math.random() * 0.012,
+      decay: 0.020 + Math.random() * 0.006,
       life: 1.0
     });
-  });
-}
-
-function spawnBurnoutSparksForCar(carGroup, intensity = 0.8) {
-  if (!carGroup || particles.length > (isMobileDevice ? 95 : 170)) return;
-  const pos = carGroup.position;
-  const yaw = carGroup.rotation.y || 0;
-  const cosY = Math.cos(yaw);
-  const sinY = Math.sin(yaw);
-  let hotMat = SPARK_MATS.get(0xff6b1a);
-  if (!hotMat) {
-    hotMat = new THREE.MeshBasicMaterial({ color: 0xff6b1a });
-    SPARK_MATS.set(0xff6b1a, hotMat);
-  }
-  let goldMat = SPARK_MATS.get(0xffe066);
-  if (!goldMat) {
-    goldMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
-    SPARK_MATS.set(0xffe066, goldMat);
-  }
-  [-1.02, 1.02].forEach(lx => {
-    const count = isMobileDevice ? 2 : 3;
-    for (let k = 0; k < count; k++) {
-      const sp = new THREE.Mesh(pGeo, k % 2 === 0 ? hotMat : goldMat);
-      const lz = 0.24;
-      const wx = pos.x + lx * cosY + lz * sinY + (Math.random() - 0.5) * 0.18;
-      const wz = pos.z - lx * sinY + lz * cosY;
-      sp.position.set(wx, pos.y + 0.14 + Math.random() * 0.10, wz);
-      scene.add(sp);
-      const backV = 0.20 + Math.random() * 0.22 + intensity * 0.14;
-      const sideV = (lx > 0 ? 1 : -1) * (0.04 + Math.random() * 0.08) + (Math.random() - 0.5) * 0.10;
-      particles.push({
-        mesh: sp,
-        vx: sinY * backV + cosY * sideV,
-        vy: 0.10 + Math.random() * 0.13,
-        vz: cosY * backV - sinY * sideV,
-        gravity: 0.009,
-        baseScale: 0.36,
-        decay: 0.048,
-        life: 0.85
-      });
-    }
   });
 }
 
@@ -4204,7 +4161,7 @@ function resetGame() {
   carPhysics.burningOut = false;
   carPhysics.burnoutCharge = 0;
   carPhysics.braking = false;
-  if (player.group.userData.burnoutGlows) player.group.userData.burnoutGlows.visible = false;
+  if (player.group.userData.burnoutMarks) player.group.userData.burnoutMarks.visible = false;
   if (typeof setCarBrakeLights === "function") setCarBrakeLights(player.group, false, false);
   sound.updateBurnout(false, 0);
 
@@ -4540,11 +4497,8 @@ function update(dtScale = 1) {
     if (frame % (isMobileDevice ? 3 : 2) === 0) {
       spawnBurnoutSmokeForCar(player.group, 0.45 + carPhysics.burnoutCharge * 0.55);
     }
-    if (carPhysics.burnoutCharge > 0.14 && frame % 2 === 0) {
-      spawnBurnoutSparksForCar(player.group, carPhysics.burnoutCharge);
-    }
     if (impactHud && impactValue && frame % 4 === 0) {
-      impactValue.textContent = `🔥 原地烧胎 · 弹射蓄力 ${Math.round(carPhysics.burnoutCharge * 100)}%`;
+      impactValue.textContent = `💨 原地烧胎 · 弹射蓄力 ${Math.round(carPhysics.burnoutCharge * 100)}%`;
       impactHud.classList.add("visible");
       clearTimeout(impactTimer);
       impactTimer = setTimeout(() => impactHud.classList.remove("visible"), 360);
@@ -4554,7 +4508,6 @@ function update(dtScale = 1) {
       const kick = 0.52 + carPhysics.burnoutCharge * 0.72;
       baseSpeed = Math.min(MAX_SPEED, Math.max(baseSpeed, kick));
       spawnBurnoutSmokeForCar(player.group, 1.0);
-      spawnBurnoutSparksForCar(player.group, 1.0);
       cameraTrauma = Math.min(1, cameraTrauma + 0.22);
       triggerHaptic([35, 30, 75]);
       if (impactHud && impactValue) {
@@ -4580,19 +4533,11 @@ function update(dtScale = 1) {
   const targetBoostAdd = boosting ? (60 / 90) : 0;
   carPhysics.boostSpeed += (targetBoostAdd - carPhysics.boostSpeed) * expEase(boosting ? 0.14 : 0.055);
   currentSpeed = burningOut ? 0 : Math.min(MAX_BOOST_SPEED, baseSpeed + carPhysics.boostSpeed);
-  if (player.group.userData.burnoutGlows && player.group.userData.burnoutGlowMat) {
-    const glowActive = burningOut || carPhysics.burnoutCharge > 0.08;
-    player.group.userData.burnoutGlows.visible = glowActive;
-    if (glowActive) {
-      const pulse = 0.85 + Math.sin(frame * 0.55) * 0.15;
-      player.group.userData.burnoutGlowMat.opacity = Math.min(0.98, (0.38 + carPhysics.burnoutCharge * 0.60) * pulse);
-      if (player.group.userData.burnoutSkidMat) {
-        player.group.userData.burnoutSkidMat.opacity = Math.min(0.72, carPhysics.burnoutCharge * 0.72);
-      }
-      const gScale = 0.88 + carPhysics.burnoutCharge * 0.48;
-      player.group.userData.burnoutGlows.children.forEach(m => {
-        if (m.userData.isHeatRing) m.scale.set(gScale, gScale, 1);
-      });
+  if (player.group.userData.burnoutMarks && player.group.userData.burnoutSkidMat) {
+    const marksActive = burningOut || carPhysics.burnoutCharge > 0.08;
+    player.group.userData.burnoutMarks.visible = marksActive;
+    if (marksActive) {
+      player.group.userData.burnoutSkidMat.opacity = Math.min(0.46, carPhysics.burnoutCharge * 0.50);
     }
   }
   const stepMeters = ((currentSpeed * 90) / 3.6 / 60) * dtScale;
@@ -4643,6 +4588,9 @@ function update(dtScale = 1) {
   else if (turnRight) targetSteer = PHYS.maxSteerAngle;
   else if (steeringMode === "tilt" && Math.abs(tiltSteer) > 0.08) {
     targetSteer = tiltSteer * PHYS.maxSteerAngle;
+  } else if (autoSteeringEnabled) {
+    // 自动回正只保持当前车道，手动按键/倾斜输入优先，不会自动避让车流。
+    targetSteer = getAutoSteeringInput(carPhysics.x, carPhysics.heading) * PHYS.maxSteerAngle;
   }
 
   const steerSpeed = targetSteer === 0 ? PHYS.steerReturn : PHYS.steerSpeed;
@@ -5121,6 +5069,28 @@ tiltMode?.addEventListener("click", () => {
 menuTiltMode?.addEventListener("click", () => {
   if (!tiltEnabled) toggleTiltSteering();
 });
+
+function updateAutoSteeringUI() {
+  autoSteerOff?.classList.toggle("active", !autoSteeringEnabled);
+  autoSteerOn?.classList.toggle("active", autoSteeringEnabled);
+  autoSteerOff?.setAttribute("aria-pressed", String(!autoSteeringEnabled));
+  autoSteerOn?.setAttribute("aria-pressed", String(autoSteeringEnabled));
+  if (autoSteerHelp) {
+    autoSteerHelp.textContent = autoSteeringEnabled
+      ? "自动回正：松开方向后回到当前车道中心；按键或倾斜可随时覆盖，不会自动躲车。"
+      : "手动驾驶：车辆方向由按键或手机倾斜控制。";
+  }
+}
+
+function setAutoSteering(enabled) {
+  autoSteeringEnabled = Boolean(enabled);
+  localStorage.setItem(AUTO_STEER_STORAGE, autoSteeringEnabled ? "1" : "0");
+  updateAutoSteeringUI();
+}
+
+autoSteerOff?.addEventListener("click", () => setAutoSteering(false));
+autoSteerOn?.addEventListener("click", () => setAutoSteering(true));
+updateAutoSteeringUI();
 
 function bindButton(selector, key) {
   const element = document.querySelector(selector);
