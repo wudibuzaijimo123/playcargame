@@ -1958,11 +1958,9 @@ function nearestLaneCenter(x) {
   return -ROAD_WIDTH / 2 + (laneIndex + 0.5) * LANE_WIDTH;
 }
 
-function applyLaneKeeping(x, steering, speed, dt) {
-  if (Math.abs(steering) > 0.01 || speed < LANE_KEEPING_MIN_SPEED) return x;
-  const target = nearestLaneCenter(x);
-  const blend = 1 - Math.exp(-LANE_KEEPING_STRENGTH * dt);
-  return x + (target - x) * blend;
+function applyLaneKeeping(x) {
+  // 取消车道自动吸附，允许车手完全自由控制横向位置、顺畅穿行两车缝隙
+  return x;
 }
 
 function vehiclesOverlap(first, second) {
