@@ -1,4 +1,4 @@
-# 离线单机版 · PlayCarGame（3D 公路竞速）
+# 离线单机版 · PlayCarGame（3D赛车 公路竞速）
 
 在线演示（GitHub Pages 纯静态）：<https://wudibuzaijimo123.github.io/playcargame/>  
 GitHub（纯单机版）：<https://github.com/wudibuzaijimo123/playcargame>  
