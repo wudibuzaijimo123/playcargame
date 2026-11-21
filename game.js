@@ -4599,7 +4599,8 @@ function update(dtScale = 1) {
   const angularVelocity = (currentSpeed / PHYS.wheelbase) * Math.tan(carPhysics.steerAngle) * 0.8;
   carPhysics.heading += angularVelocity * dt * 5.0;
 
-  if (targetSteer === 0) {
+  if (targetSteer === 0 && autoSteeringEnabled) {
+    // 仅自动回正模式修正车身朝向；手动模式保留真实转向惯性。
     carPhysics.heading += (0 - carPhysics.heading) * Math.min(1.0, PHYS.headingAlignRate * dt * 3.2);
   }
 
