@@ -55,8 +55,8 @@ let tiltEnabled = false;
 let tiltSteer = 0;
 let tiltCenter = null;
 let steeringMode = "buttons";
-const AUTO_STEER_STORAGE = "racerAutoSteer";
-let autoSteeringEnabled = localStorage.getItem(AUTO_STEER_STORAGE) === "1";
+const AUTO_STEER_STORAGE = "racerAutoSteerV2";
+let autoSteeringEnabled = localStorage.getItem(AUTO_STEER_STORAGE) !== "0";
 const keys = {};
 
 // ── 可自定义快捷键（默认：W 油门 / S 刹车 / Shift 加速 / ←→ 转向）──
