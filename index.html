@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="theme-color" content="#050614">
   <title>3D 公路竞速 · 单机离线版</title>
-  <link rel="stylesheet" href="style.css?v=65">
+  <link rel="stylesheet" href="style.css?v=66">
 </head>
 <body>
   <!-- 3D WebGL Canvas 容器 -->
@@ -24,6 +24,19 @@
       <button id="exitGameBtn" class="exit-btn" title="退出当前对局返回菜单" type="button">退出</button>
       <button id="tiltToggle" class="icon-btn tilt-btn" title="开启手机倾斜转向" type="button">📱</button>
       <button id="audioToggle" class="icon-btn" title="关闭音乐音效" type="button">🔊</button>
+      <button id="mixerToggle" class="icon-btn mixer-btn" title="调节音乐与特效音量" type="button">🎚️</button>
+      <div class="volume-popover hidden" id="volumePopover" role="dialog" aria-label="音量调节">
+        <div class="volume-row">
+          <span>🎵 音乐</span>
+          <input id="popMusicVol" type="range" min="0" max="100" value="75">
+          <b id="popMusicVal">75%</b>
+        </div>
+        <div class="volume-row">
+          <span>🔊 特效</span>
+          <input id="popSfxVol" type="range" min="0" max="100" value="85">
+          <b id="popSfxVal">85%</b>
+        </div>
+      </div>
       <div class="quick-scene-select">
         <select id="quickSceneSelect" aria-label="切换场景">
           <option value="country">🌾 乡间小路</option>
@@ -124,6 +137,21 @@
           </div>
         </section>
 
+        <!-- 车身涂装颜色选择 -->
+        <section class="menu-section car-color-selector">
+          <div class="theme-label">车身颜色 <small id="carColorName">岩石灰</small></div>
+          <div class="car-color-swatches" id="carColorSwatches" role="radiogroup" aria-label="选择汽车颜色">
+            <button class="color-swatch active" type="button" data-color="#4a525d" data-name="岩石灰" title="岩石灰" style="--swatch:#4a525d"></button>
+            <button class="color-swatch" type="button" data-color="#eef2f7" data-name="珍珠白" title="珍珠白" style="--swatch:#eef2f7"></button>
+            <button class="color-swatch" type="button" data-color="#d6222c" data-name="烈焰红" title="烈焰红" style="--swatch:#d6222c"></button>
+            <button class="color-swatch" type="button" data-color="#1d6ef5" data-name="赛道蓝" title="赛道蓝" style="--swatch:#1d6ef5"></button>
+            <button class="color-swatch" type="button" data-color="#1e232b" data-name="曜石黑" title="曜石黑" style="--swatch:#1e232b"></button>
+            <button class="color-swatch" type="button" data-color="#eb5e18" data-name="熔岩橙" title="熔岩橙" style="--swatch:#eb5e18"></button>
+            <button class="color-swatch" type="button" data-color="#eab322" data-name="鎏金黄" title="鎏金黄" style="--swatch:#eab322"></button>
+            <button class="color-swatch" type="button" data-color="#178f59" data-name="苍翠绿" title="苍翠绿" style="--swatch:#178f59"></button>
+          </div>
+        </section>
+
         <div class="menu-row">
           <label class="name-field">
             <span>车手昵称</span>
@@ -174,6 +202,18 @@
           </div>
 
           <div class="audio-settings">
+            <div class="volume-sliders">
+              <label class="volume-row">
+                <span>🎵 音乐音量</span>
+                <input id="musicVolSlider" type="range" min="0" max="100" value="75">
+                <b id="musicVolVal">75%</b>
+              </label>
+              <label class="volume-row">
+                <span>🔊 特效音量</span>
+                <input id="sfxVolSlider" type="range" min="0" max="100" value="85">
+                <b id="sfxVolVal">85%</b>
+              </label>
+            </div>
             <button id="testAudioBtn" class="test-audio-btn" type="button">🎵 播放 / 试听邓紫棋歌单</button>
             <button id="nextTrackBtn" class="test-audio-btn" type="button">⏭ 切下一首（7 首歌单循环）</button>
             <label class="custom-music-btn">
@@ -199,6 +239,6 @@
 
   <!-- 本地 Three.js 核心库 -->
   <script src="assets/three.min.js"></script>
-  <script src="game.js?v=99"></script>
+  <script src="game.js?v=101"></script>
 </body>
 </html>

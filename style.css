@@ -119,6 +119,7 @@ canvas {
 }
 
 .topbar-actions {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -992,6 +993,100 @@ p {
 .menu-section { margin: 16px 0 0; text-align: left; }
 .theme-selector { margin: 16px 0 0; }
 .theme-label small { margin-left: 6px; color: #8da8d4; font-weight: 600; font-size: 11px; letter-spacing: 0; }
+
+.car-color-selector { margin: 12px 0 0; }
+.menu-scroll { overflow-x: hidden; }
+.car-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+}
+.color-swatch {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.52) 0%, var(--swatch) 48%, rgba(0, 0, 0, 0.35) 100%), var(--swatch);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.38), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.color-swatch:hover {
+  transform: scale(1.12);
+  border-color: rgba(255, 255, 255, 0.85);
+}
+.color-swatch.active {
+  border-color: #ffe066;
+  transform: scale(1.14);
+  box-shadow: 0 0 0 3px rgba(255, 224, 102, 0.34), 0 3px 10px rgba(0, 0, 0, 0.5);
+}
+.color-swatch.active::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+
+/* 独立音乐 / 特效音量滑块 + 顶栏悬浮调音台 */
+.volume-sliders {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(97, 239, 255, 0.22);
+  background: rgba(8, 16, 36, 0.72);
+}
+.volume-row {
+  display: grid;
+  grid-template-columns: 78px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  color: #dce8f6;
+  font-size: 12px;
+  font-weight: 700;
+}
+.volume-row b {
+  text-align: right;
+  color: #ffe066;
+  font-family: 'Orbitron', monospace;
+  font-size: 11px;
+}
+.volume-row input[type="range"] {
+  width: 100%;
+  accent-color: #38e0ff;
+  cursor: pointer;
+  height: 5px;
+}
+.volume-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: 244px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(97, 239, 255, 0.35);
+  background: rgba(10, 18, 36, 0.92);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  display: grid;
+  gap: 10px;
+}
+.volume-popover.hidden {
+  display: none;
+}
+.volume-popover .volume-row {
+  grid-template-columns: 58px 1fr 38px;
+}
 
 .menu-row {
   display: grid;
