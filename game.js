@@ -199,12 +199,14 @@ const GEM_PLAYLIST = [
 
 class MusicEngine {
   constructor() {
-    // 默认开启播放，可随时点击右上角喇叭手动关闭；支持音乐声与特效声独立调音量
-    this.enabled = localStorage.getItem("racerAudioEnabled") !== "0";
-    const savedMusic = Number(localStorage.getItem("racerMusicVolume"));
-    const savedSfx = Number(localStorage.getItem("racerSfxVolume"));
-    this.musicVolume = Number.isFinite(savedMusic) ? Math.max(0, Math.min(1, savedMusic)) : 0.75;
-    this.sfxVolume = Number.isFinite(savedSfx) ? Math.max(0, Math.min(1, savedSfx)) : 0.85;
+    // 默认开启音乐声(75%)与特效声(85%)；使用独立百分比键名修复旧缓存 Number(null)===0 导致静音的问题
+    this.enabled = localStorage.getItem("racerAudioMuted") !== "1";
+    const rawMusic = localStorage.getItem("racerMusicVolPct");
+    const rawSfx = localStorage.getItem("racerSfxVolPct");
+    const parsedM = rawMusic !== null && rawMusic !== "" ? Number(rawMusic) : NaN;
+    const parsedS = rawSfx !== null && rawSfx !== "" ? Number(rawSfx) : NaN;
+    this.musicVolume = Number.isFinite(parsedM) ? Math.max(0, Math.min(1, parsedM / 100)) : 0.75;
+    this.sfxVolume = Number.isFinite(parsedS) ? Math.max(0, Math.min(1, parsedS / 100)) : 0.85;
     this.trackIndex = 0;
     this.bgmAudio = null;
     this.bgmBound = false;
@@ -214,39 +216,113 @@ class MusicEngine {
     this.customTrackTitle = "";
     this.errorSkips = 0;
     this.ctx = null;
+    this.musicMasterGain = null;
+    this.sfxMasterGain = null;
+    this.musicSourceConnected = false;
+    this.crashSourceConnected = false;
+    this.coinSourceConnected = false;
     this.engineGain = null;
     this.engineOsc = null;
     this.burnoutGain = null;
     this.burnoutFilter = null;
+    this.lastPreviewAt = 0;
+  }
+
+  // 对数感知响度曲线（解决线性音量条前半段听感变化不明显的问题）
+  musicGainValue() {
+    if (!this.enabled || this.musicVolume <= 0.005) return 0;
+    return Math.pow(this.musicVolume, 1.75);
+  }
+
+  sfxGainValue() {
+    if (!this.enabled || this.sfxVolume <= 0.005) return 0;
+    return Math.pow(this.sfxVolume, 1.75);
+  }
+
+  applyMasterVolumes() {
+    const mGain = this.musicGainValue();
+    const sGain = this.sfxGainValue();
+    if (this.ctx && this.musicMasterGain) {
+      try { this.musicMasterGain.gain.setTargetAtTime(mGain, this.ctx.currentTime, 0.015); } catch (e) {}
+    }
+    if (this.ctx && this.sfxMasterGain) {
+      try { this.sfxMasterGain.gain.setTargetAtTime(sGain, this.ctx.currentTime, 0.015); } catch (e) {}
+    }
+    if (this.bgmAudio) {
+      try {
+        this.bgmAudio.muted = (!this.enabled || this.musicVolume <= 0.005);
+        this.bgmAudio.volume = this.musicSourceConnected ? 1.0 : mGain;
+      } catch (e) {}
+    }
+    if (this.crashAudio) {
+      try {
+        this.crashAudio.muted = (!this.enabled || this.sfxVolume <= 0.005);
+        this.crashAudio.volume = this.crashSourceConnected ? 0.30 : Math.min(1, 0.30 * sGain);
+      } catch (e) {}
+    }
+    if (this.coinAudio) {
+      try {
+        this.coinAudio.muted = (!this.enabled || this.sfxVolume <= 0.005);
+        this.coinAudio.volume = this.coinSourceConnected ? 0.82 : Math.min(1, 0.82 * sGain);
+      } catch (e) {}
+    }
   }
 
   setMusicVolume(v) {
     const clamped = Math.max(0, Math.min(1, Number(v) || 0));
     this.musicVolume = clamped;
-    localStorage.setItem("racerMusicVolume", String(clamped));
-    if (this.bgmAudio) {
-      try { this.bgmAudio.volume = this.enabled ? clamped : 0; } catch (e) {}
+    localStorage.setItem("racerMusicVolPct", String(Math.round(clamped * 100)));
+    if (clamped > 0.01 && !this.enabled) {
+      this.enabled = true;
+      localStorage.setItem("racerAudioMuted", "0");
+      syncAudioUI();
+    }
+    this.applyMasterVolumes();
+    syncVolumeSlidersUI();
+  }
+
+  setSfxVolume(v, playPreview = false) {
+    const clamped = Math.max(0, Math.min(1, Number(v) || 0));
+    this.sfxVolume = clamped;
+    localStorage.setItem("racerSfxVolPct", String(Math.round(clamped * 100)));
+    if (clamped > 0.01 && !this.enabled) {
+      this.enabled = true;
+      localStorage.setItem("racerAudioMuted", "0");
+      syncAudioUI();
+    }
+    this.applyMasterVolumes();
+    if (this.ctx && this.engineGain && clamped <= 0.005) {
+      try { this.engineGain.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.02); } catch (e) {}
+    }
+    if (this.ctx && this.burnoutGain && clamped <= 0.005) {
+      try { this.burnoutGain.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.02); } catch (e) {}
+    }
+    if (playPreview && !running && clamped > 0.01) {
+      this.playSfxPreview();
     }
     syncVolumeSlidersUI();
   }
 
-  setSfxVolume(v) {
-    const clamped = Math.max(0, Math.min(1, Number(v) || 0));
-    this.sfxVolume = clamped;
-    localStorage.setItem("racerSfxVolume", String(clamped));
-    if (this.crashAudio) {
-      try { this.crashAudio.volume = 0.28 * clamped; } catch (e) {}
-    }
-    if (this.coinAudio) {
-      try { this.coinAudio.volume = 0.8 * clamped; } catch (e) {}
-    }
-    if (this.ctx && this.engineGain && clamped <= 0.001) {
-      try { this.engineGain.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.04); } catch (e) {}
-    }
-    if (this.ctx && this.burnoutGain && clamped <= 0.001) {
-      try { this.burnoutGain.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.04); } catch (e) {}
-    }
-    syncVolumeSlidersUI();
+  playSfxPreview() {
+    const nowMs = Date.now();
+    if (!this.enabled || this.sfxVolume <= 0.005 || nowMs - this.lastPreviewAt < 130) return;
+    this.lastPreviewAt = nowMs;
+    this.ensureContext();
+    if (!this.ctx || this.ctx.state !== "running") return;
+    try {
+      const now = this.ctx.currentTime + 0.005;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(320 + this.sfxVolume * 220, now);
+      osc.frequency.exponentialRampToValueAtTime(520 + this.sfxVolume * 260, now + 0.065);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+      osc.connect(gain);
+      gain.connect(this.sfxMasterGain || this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch (e) {}
   }
 
   currentTrack() {
@@ -262,8 +338,9 @@ class MusicEngine {
     if (!this.bgmAudio.getAttribute("src") || !this.bgmAudio.src.endsWith(encoded)) {
       this.bgmAudio.src = encoded;
     }
+    this.applyMasterVolumes();
     syncAudioUI();
-    if (autoPlay && this.enabled) {
+    if (autoPlay && this.enabled && this.musicVolume > 0.005) {
       this.bgmAudio.currentTime = 0;
       this.bgmAudio.play().then(() => syncAudioUI()).catch(e => {
         console.log("HTML5 Audio wait for gesture:", e);
@@ -284,7 +361,6 @@ class MusicEngine {
     if (!this.bgmAudio) {
       this.bgmAudio = document.querySelector("#bgmAudio") || new Audio(encodeURI(this.currentTrack().src));
       this.bgmAudio.loop = Boolean(this.customTrackUrl);
-      this.bgmAudio.volume = this.musicVolume;
     }
     if (this.bgmAudio && !this.bgmBound) {
       this.bgmBound = true;
@@ -299,6 +375,7 @@ class MusicEngine {
       });
       this.bgmAudio.addEventListener("playing", () => {
         this.errorSkips = 0;
+        this.applyMasterVolumes();
         syncAudioUI();
       });
       this.bgmAudio.addEventListener("play", () => syncAudioUI());
@@ -306,11 +383,9 @@ class MusicEngine {
     }
     if (!this.crashAudio) {
       this.crashAudio = document.querySelector("#crashAudio") || new Audio("assets/crash.wav");
-      this.crashAudio.volume = 0.28 * this.sfxVolume;
     }
     if (!this.coinAudio) {
       this.coinAudio = document.querySelector("#coinAudio") || new Audio("assets/coin.wav");
-      this.coinAudio.volume = 0.8 * this.sfxVolume;
     }
 
     if (!this.ctx) {
@@ -318,6 +393,37 @@ class MusicEngine {
       if (AudioCtx) {
         try {
           this.ctx = new AudioCtx();
+          this.musicMasterGain = this.ctx.createGain();
+          this.musicMasterGain.gain.setValueAtTime(this.musicGainValue(), this.ctx.currentTime);
+          this.musicMasterGain.connect(this.ctx.destination);
+
+          this.sfxMasterGain = this.ctx.createGain();
+          this.sfxMasterGain.gain.setValueAtTime(this.sfxGainValue(), this.ctx.currentTime);
+          this.sfxMasterGain.connect(this.ctx.destination);
+
+          // 接入 WebAudio 总线（解决 iOS Safari 无法调节 HTMLAudioElement.volume 且支持实时无延迟调音）
+          if (this.bgmAudio && !this.musicSourceConnected && location.protocol !== "file:") {
+            try {
+              const mSrc = this.ctx.createMediaElementSource(this.bgmAudio);
+              mSrc.connect(this.musicMasterGain);
+              this.musicSourceConnected = true;
+            } catch (e) {}
+          }
+          if (this.crashAudio && !this.crashSourceConnected && location.protocol !== "file:") {
+            try {
+              const cSrc = this.ctx.createMediaElementSource(this.crashAudio);
+              cSrc.connect(this.sfxMasterGain);
+              this.crashSourceConnected = true;
+            } catch (e) {}
+          }
+          if (this.coinAudio && !this.coinSourceConnected && location.protocol !== "file:") {
+            try {
+              const kSrc = this.ctx.createMediaElementSource(this.coinAudio);
+              kSrc.connect(this.sfxMasterGain);
+              this.coinSourceConnected = true;
+            } catch (e) {}
+          }
+
           // iOS Safari 专用的 1-sample 静音解锁 buffer
           const buffer = this.ctx.createBuffer(1, 1, 22050);
           const source = this.ctx.createBufferSource();
@@ -331,11 +437,13 @@ class MusicEngine {
     if (this.ctx && this.ctx.state === "suspended") {
       this.ctx.resume().catch(() => {});
     }
+    this.applyMasterVolumes();
   }
 
   setupEngineSound() {
     if (!this.ctx) return;
     try {
+      const sfxOut = this.sfxMasterGain || this.ctx.destination;
       this.engineOsc = this.ctx.createOscillator();
       this.engineOsc.type = "sine";
       this.engineOsc.frequency.setValueAtTime(95, this.ctx.currentTime);
@@ -344,7 +452,7 @@ class MusicEngine {
       this.engineGain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
 
       this.engineOsc.connect(this.engineGain);
-      this.engineGain.connect(this.ctx.destination);
+      this.engineGain.connect(sfxOut);
       this.engineOsc.start();
 
       // 烧胎摩擦尖啸与橡胶烟气白噪声通道
@@ -364,7 +472,7 @@ class MusicEngine {
       this.burnoutGain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
       noiseSrc.connect(bp);
       bp.connect(this.burnoutGain);
-      this.burnoutGain.connect(this.ctx.destination);
+      this.burnoutGain.connect(sfxOut);
       noiseSrc.start();
     } catch (e) {}
   }
@@ -374,8 +482,9 @@ class MusicEngine {
     try {
       const paused = typeof raceSync !== "undefined" && raceSync.paused;
       const on = Boolean(running && this.enabled && !paused && active && this.sfxVolume > 0.005);
-      const targetGain = on ? Math.max(0.0001, (0.048 + intensity * 0.058) * this.sfxVolume) : 0.0001;
-      this.burnoutGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.06);
+      const scale = this.sfxMasterGain ? 1.0 : this.sfxGainValue();
+      const targetGain = on ? Math.max(0.0001, (0.055 + intensity * 0.065) * scale) : 0.0001;
+      this.burnoutGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05);
       if (on) {
         this.burnoutFilter.frequency.setTargetAtTime(1250 + intensity * 720, this.ctx.currentTime, 0.08);
       }
@@ -387,8 +496,9 @@ class MusicEngine {
     try {
       const paused = typeof raceSync !== "undefined" && raceSync.paused;
       const active = Boolean(running && this.enabled && !paused && this.sfxVolume > 0.005);
-      const targetGain = active ? Math.max(0.0001, 0.058 * this.sfxVolume) : 0.0001;
-      this.engineGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.08);
+      const scale = this.sfxMasterGain ? 1.0 : this.sfxGainValue();
+      const targetGain = active ? Math.max(0.0001, 0.065 * scale) : 0.0001;
+      this.engineGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.06);
       if (active) {
         const targetFreq = 95 + speed * 95 + (isBoosting ? 85 : 0);
         this.engineOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
@@ -397,14 +507,14 @@ class MusicEngine {
   }
 
   startBGM() {
-    if (!this.enabled) return;
+    if (!this.enabled || this.musicVolume <= 0.005) return;
     this.ensureContext();
 
     // 播放用户提供的歌单列表（单曲播完自动切换下一首循环）
     if (this.bgmAudio) {
       try {
         this.bgmAudio.loop = Boolean(this.customTrackUrl);
-        this.bgmAudio.volume = this.musicVolume;
+        this.applyMasterVolumes();
         if (!this.bgmAudio.getAttribute("src") && !this.customTrackUrl) {
           this.loadTrack(this.trackIndex, false);
         }
@@ -436,22 +546,23 @@ class MusicEngine {
     if (this.crashAudio) {
       try {
         if (this.crashAudio.readyState > 0) this.crashAudio.currentTime = 0;
-        this.crashAudio.volume = Math.min(1, 0.28 * this.sfxVolume);
+        this.applyMasterVolumes();
         this.crashAudio.play().catch(() => {});
       } catch (e) {}
     }
-    // 柔和低频碰撞反馈音（随特效音量缩放）
+    // 柔和低频碰撞反馈音（经由 sfxMasterGain 实时受特效音量控制）
     if (this.ctx && this.ctx.state === "running") {
       try {
         const now = this.ctx.currentTime + 0.01;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
+        const scale = this.sfxMasterGain ? 1.0 : this.sfxGainValue();
         osc.frequency.setValueAtTime(140, now);
         osc.frequency.exponentialRampToValueAtTime(32, now + 0.35);
-        gain.gain.setValueAtTime(Math.max(0.001, 0.22 * this.sfxVolume), now);
+        gain.gain.setValueAtTime(Math.max(0.001, 0.24 * scale), now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this.sfxMasterGain || this.ctx.destination);
         osc.start(now);
         osc.stop(now + 0.4);
       } catch(e) {}
@@ -466,13 +577,14 @@ class MusicEngine {
         const now = this.ctx.currentTime + 0.01;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
+        const scale = this.sfxMasterGain ? 1.0 : this.sfxGainValue();
         osc.type = "triangle";
         osc.frequency.setValueAtTime(110, now);
         osc.frequency.exponentialRampToValueAtTime(45, now + 0.14);
-        gain.gain.setValueAtTime(Math.max(0.001, 0.16 * this.sfxVolume), now);
+        gain.gain.setValueAtTime(Math.max(0.001, 0.18 * scale), now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this.sfxMasterGain || this.ctx.destination);
         osc.start(now);
         osc.stop(now + 0.18);
       } catch (e) {}
@@ -485,7 +597,7 @@ class MusicEngine {
     if (this.coinAudio) {
       try {
         if (this.coinAudio.readyState > 0) this.coinAudio.currentTime = 0;
-        this.coinAudio.volume = Math.min(1, 0.8 * this.sfxVolume);
+        this.applyMasterVolumes();
         this.coinAudio.play().catch(() => {});
       } catch (e) {}
     }
@@ -499,13 +611,14 @@ class MusicEngine {
         const now = this.ctx.currentTime + 0.01;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
+        const scale = this.sfxMasterGain ? 1.0 : this.sfxGainValue();
         osc.type = "sine";
         osc.frequency.setValueAtTime(220, now);
         osc.frequency.exponentialRampToValueAtTime(680, now + 0.35);
-        gain.gain.setValueAtTime(Math.max(0.001, 0.30 * this.sfxVolume), now);
+        gain.gain.setValueAtTime(Math.max(0.001, 0.32 * scale), now);
         gain.gain.linearRampToValueAtTime(0.001, now + 0.4);
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(this.sfxMasterGain || this.ctx.destination);
         osc.start(now);
         osc.stop(now + 0.4);
       } catch (e) {}
@@ -514,7 +627,8 @@ class MusicEngine {
 
   toggle() {
     this.enabled = !this.enabled;
-    localStorage.setItem("racerAudioEnabled", this.enabled ? "1" : "0");
+    localStorage.setItem("racerAudioMuted", this.enabled ? "0" : "1");
+    this.applyMasterVolumes();
     if (this.enabled) {
       this.startBGM();
     } else {
@@ -549,36 +663,46 @@ function syncVolumeSlidersUI() {
   ["#musicVolSlider", "#popMusicVol"].forEach(id => {
     const el = document.querySelector(id);
     if (!el) return;
-    el.addEventListener("input", () => {
+    const onMusicSlide = () => {
       sound.ensureContext();
-      sound.setMusicVolume(Number(el.value) / 100);
-      if (sound.enabled && sound.musicVolume > 0 && sound.bgmAudio && sound.bgmAudio.paused && running) {
+      const v = Number(el.value) / 100;
+      sound.setMusicVolume(v);
+      if (v <= 0.005) {
+        if (sound.bgmAudio && !sound.bgmAudio.paused) sound.bgmAudio.pause();
+      } else if (sound.enabled && sound.bgmAudio && sound.bgmAudio.paused) {
         sound.startBGM();
       }
-    });
+    };
+    el.addEventListener("input", onMusicSlide);
+    el.addEventListener("change", onMusicSlide);
   });
   ["#sfxVolSlider", "#popSfxVol"].forEach(id => {
     const el = document.querySelector(id);
     if (!el) return;
-    el.addEventListener("input", () => {
+    const onSfxSlide = () => {
       sound.ensureContext();
-      sound.setSfxVolume(Number(el.value) / 100);
-    });
+      sound.setSfxVolume(Number(el.value) / 100, true);
+    };
+    el.addEventListener("input", onSfxSlide);
+    el.addEventListener("change", onSfxSlide);
   });
   const mixerToggle = document.querySelector("#mixerToggle");
   const volumePopover = document.querySelector("#volumePopover");
   if (mixerToggle && volumePopover) {
+    mixerToggle.addEventListener("pointerdown", (ev) => ev.stopPropagation());
     mixerToggle.addEventListener("click", (ev) => {
       ev.stopPropagation();
       volumePopover.classList.toggle("hidden");
     });
+    volumePopover.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+    volumePopover.addEventListener("touchstart", (ev) => ev.stopPropagation(), { passive: true });
     volumePopover.addEventListener("click", (ev) => ev.stopPropagation());
     document.addEventListener("click", () => volumePopover.classList.add("hidden"));
   }
   document.querySelectorAll("#carColorSwatches .color-swatch").forEach(btn => {
     btn.addEventListener("click", () => {
       applyCarColor(btn.dataset.color);
-          });
+    });
   });
 })();
 
@@ -4972,9 +5096,11 @@ function loadLeaderboard() {
 // 全局交互与事件绑定 (确保苹果 iOS Safari 及全平台 100% 唤醒音频)
 // ═══════════════════════════════════════
 function unlockAudioAndHaptics(event) {
-  if (event && event.target && event.target.closest && event.target.closest("#audioToggle")) return;
+  if (event && event.target && event.target.closest) {
+    if (event.target.closest("#audioToggle") || event.target.closest("#mixerToggle") || event.target.closest("#volumePopover") || event.target.closest(".volume-sliders")) return;
+  }
   sound.ensureContext();
-  if (sound.enabled && sound.bgmAudio && sound.bgmAudio.paused) {
+  if (sound.enabled && sound.musicVolume > 0.005 && sound.bgmAudio && sound.bgmAudio.paused) {
     sound.startBGM();
   }
 }
@@ -5232,6 +5358,8 @@ if (customMusicInput) {
       sound.bgmAudio.loop = true;
     }
     sound.enabled = true;
+    localStorage.setItem("racerAudioMuted", "0");
+    if (sound.musicVolume <= 0.01) sound.setMusicVolume(0.75);
     sound.startBGM();
     syncAudioUI();
   });
@@ -5242,8 +5370,9 @@ if (testAudioBtn) {
   testAudioBtn.addEventListener("click", () => {
     if (!sound.enabled) {
       sound.enabled = true;
-      localStorage.setItem("racerAudioEnabled", "1");
+      localStorage.setItem("racerAudioMuted", "0");
     }
+    if (sound.musicVolume <= 0.01) sound.setMusicVolume(0.75);
     sound.ensureContext();
     sound.startBGM();
     syncAudioUI();
@@ -5255,8 +5384,9 @@ if (nextTrackBtn) {
   nextTrackBtn.addEventListener("click", () => {
     if (!sound.enabled) {
       sound.enabled = true;
-      localStorage.setItem("racerAudioEnabled", "1");
+      localStorage.setItem("racerAudioMuted", "0");
     }
+    if (sound.musicVolume <= 0.01) sound.setMusicVolume(0.75);
     sound.ensureContext();
     sound.nextTrack(true);
   });
